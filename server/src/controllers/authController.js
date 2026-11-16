@@ -209,6 +209,7 @@ export const createInvitation = async (req, res) => {
         role: role.name,
         errorName: typeof error.name === 'string' ? error.name : 'Error',
         ...(typeof error.code === 'string' ? { errorCode: error.code } : {}),
+        ...(Number.isInteger(error.status) ? { errorStatus: error.status } : {}),
       }));
     }
   }

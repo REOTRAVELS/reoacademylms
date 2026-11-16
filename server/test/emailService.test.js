@@ -83,6 +83,10 @@ test('Brevo transport surfaces provider failures', async () => {
       subject: 'Reset your password',
       text: 'Use this one-time link.',
     }),
-    /Brevo email request failed with status 401/,
+    (error) => {
+      assert.match(error.message, /Brevo email request failed with status 401/);
+      assert.equal(error.status, 401);
+      return true;
+    },
   );
 });

@@ -27,7 +27,9 @@ export const createBrevoTransport = ({ apiKey, fetchImpl = fetch }) => ({
       }),
     });
     if (!response.ok) {
-      throw new Error(`Brevo email request failed with status ${response.status}`);
+      const error = new Error(`Brevo email request failed with status ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
   },
 });
