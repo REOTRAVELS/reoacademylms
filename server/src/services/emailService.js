@@ -59,32 +59,22 @@ export const createEmailService = ({ mailTransport, from }) => ({
       ].join('\n'),
     });
   },
-  sendTrainerInvitationEmail: async (email, invitationUrl, expiresAt) => {
+  sendInvitationEmail: async (email, invitationUrl, expiresAt, roleName) => {
+    const roleLabel = roleName === 'STUDENT' ? 'Student' : 'Trainer';
     await mailTransport.sendMail({
       from,
       to: email,
       subject: 'You are invited to REO Travel Academy',
       text: [
-        'You have been invited to join REO Travel Academy as a Trainer.',
+        `You have been invited to join REO Travel Academy as a ${roleLabel}.`,
         '',
         `Accept your invitation and set your password here: ${invitationUrl}`,
         `This one-time link expires on ${expiresAt.toLocaleString()}.`,
         '',
+        ...(roleName === 'STUDENT'
+          ? ['Academic access requires an approved Program application and an active Program enrollment.', '']
+          : []),
         'If you were not expecting this invitation, you can ignore this message.',
-      ].join('\n'),
-    });
-  },
-  sendStudentApplicationLinkEmail: async (email, applicationUrl) => {
-    await mailTransport.sendMail({
-      from,
-      to: email,
-      subject: 'Apply to REO Travel Academy',
-      text: [
-        'You have been invited to apply to REO Travel Academy.',
-        '',
-        `Review the available Programs and Intakes and submit your application here: ${applicationUrl}`,
-        '',
-        'Submitting an application does not create an active student account. Admission is subject to review.',
       ].join('\n'),
     });
   },
@@ -105,10 +95,6 @@ export const sendPasswordResetEmail = (...args) => (
   requireEmailService().sendPasswordResetEmail(...args)
 );
 
-export const sendTrainerInvitationEmail = (...args) => (
-  requireEmailService().sendTrainerInvitationEmail(...args)
-);
-
-export const sendStudentApplicationLinkEmail = (...args) => (
-  requireEmailService().sendStudentApplicationLinkEmail(...args)
+export const sendInvitationEmail = (...args) => (
+  requireEmailService().sendInvitationEmail(...args)
 );

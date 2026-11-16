@@ -6,32 +6,36 @@ import { Input } from '../../components/forms/Input';
 import { authAPI } from '../../services/api';
 
 export default function StudentInvitationPage() {
-  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [email, setEmail] = useState('');
+  const [invitationUrl, setInvitationUrl] = useState('');
   const [sending, setSending] = useState(false);
-  const registrationUrl = `${window.location.origin}/register`;
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(registrationUrl);
-      setNotice('Student application link copied.');
+      await navigator.clipboard.writeText(invitationUrl);
+      setNotice('Student invitation link copied.');
     } catch {
-      setNotice('Clipboard access is unavailable. Select and copy the link below.');
+      setNotice('Clipboard access is unavailable. Select and copy the invitation link below.');
     }
   };
 
-  const sendApplicationLink = async (event) => {
+  const createInvitation = async (event) => {
     event.preventDefault();
     setSending(true);
-    setNotice('');
     setError('');
+    setNotice('');
+    setInvitationUrl('');
     try {
-      await authAPI.sendStudentApplicationLink({ email });
+      const { data } = await authAPI.createInvitation({ email, role: 'STUDENT' });
+      setInvitationUrl(data.data.invitationUrl || `${window.location.origin}/accept-invite/${data.data.token}`);
       setEmail('');
-      setNotice('Student application link emailed.');
+      setNotice(data.data.emailSent
+        ? 'Invitation emailed to the student. You can also copy the secure link below.'
+        : 'Invitation created, but email is unavailable. Copy and share the secure link with the student.');
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not email the application link.');
+      setError(requestError.response?.data?.message || 'Could not create the student invitation.');
     } finally {
       setSending(false);
     }
@@ -42,35 +46,45 @@ export default function StudentInvitationPage() {
       <Link className="back-link" to="/students"><ArrowLeft size={16} /> Student directory</Link>
       <section className="page-heading">
         <div>
-          <span className="eyebrow">Admissions</span>
-          <h1>Student application link</h1>
-          <p>Students choose one open Program and Intake when they apply. Staff invitations cannot activate student accounts.</p>
+          <span className="eyebrow">People &amp; access</span>
+          <h1>Invite a student</h1>
+          <p>Send a one-time invitation so the student can set a password and create their account.</p>
         </div>
       </section>
       <section className="card invite-card">
         <div className="invite-intro">
           <span className="invite-illustration"><GraduationCap size={27} /></span>
-          <div><h2>Share the application form</h2><p>Applicants remain restricted from academic resources until their application is approved.</p></div>
+          <div>
+            <h2>Student invitation</h2>
+            <p>Students must have an approved Program application and active enrollment before accessing academic resources.</p>
+          </div>
         </div>
         {notice && <div className="notice notice-success" role="status">{notice}</div>}
         {error && <div className="notice notice-error" role="alert">{error}</div>}
-        <div className="invite-link">
-          <input readOnly value={registrationUrl} aria-label="Student application link" onFocus={(event) => event.target.select()} />
-          <Button variant="secondary" onClick={copyLink}><Copy size={15} /> Copy link</Button>
-        </div>
-        <form className="invite-form" onSubmit={sendApplicationLink}>
+        {invitationUrl && (
+          <div className="invite-link">
+            <input
+              readOnly
+              value={invitationUrl}
+              aria-label="Student invitation link"
+              onFocus={(event) => event.target.select()}
+            />
+            <Button variant="secondary" onClick={copyLink}><Copy size={15} /> Copy link</Button>
+          </div>
+        )}
+        <form className="invite-form" onSubmit={createInvitation}>
           <Input
-            label="Applicant email"
+            label="Student email"
             type="email"
             name="email"
             autoComplete="email"
             required
             value={email}
             onChange={setEmail}
-            placeholder="applicant@example.com"
+            placeholder="student@example.com"
           />
           <Button type="submit" disabled={sending}>
-            <Mail size={15} /> {sending ? 'Sending…' : 'Email application link'}
+            <Mail size={15} /> {sending ? 'Creating invitation…' : 'Create invitation'}
           </Button>
         </form>
       </section>

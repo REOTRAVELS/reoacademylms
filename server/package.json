@@ -11,6 +11,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "node prisma/seed.js",
     "prisma:studio": "prisma studio",
+    "admin:bootstrap": "node scripts/bootstrapSuperAdmin.js",
     "files:migrate-to-s3": "node scripts/migrateLocalUploadsToS3.js",
     "test": "node --test"
   },

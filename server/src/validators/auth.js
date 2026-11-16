@@ -53,12 +53,6 @@ export const approveSchema = z.object({
 export const createInvitationSchema = z.object({
   body: z.object({
     email: z.string().email(),
-    roleId: z.string().min(1),
-  }),
-});
-
-export const studentApplicationLinkSchema = z.object({
-  body: z.object({
-    email: z.string().email(),
+    role: z.enum(['TRAINER', 'STUDENT']),
   }),
 });

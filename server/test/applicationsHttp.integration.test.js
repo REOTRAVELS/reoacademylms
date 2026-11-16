@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 process.env.JWT_SECRET ||= 'applications-http-integration-secret';
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
+process.env.BREVO_API_KEY = '';
+process.env.EMAIL_FROM = '';
+process.env.SMTP_URL = '';
+process.env.SMTP_FROM = '';
 
 const [{ default: app }, { default: prisma }, { signToken }] = await Promise.all([
   import('../src/app.js'),
@@ -510,67 +514,102 @@ test('a concurrent application transaction conflict returns a retryable conflict
   }
 });
 
-test('student invitations cannot create or activate student accounts', async () => {
+test('Super Admins can create one-time Student invitations', async () => {
+  let createdInvitation;
+  const restores = [
+    stubMethod(prisma.user, 'findUnique', async ({ where }) => (
+      where.id ? admin : null
+    )),
+    stubMethod(prisma.role, 'upsert', async () => ({ id: 'student-role', name: 'STUDENT' })),
+    stubMethod(prisma.invitation, 'create', async ({ data }) => {
+      createdInvitation = data;
+      return { id: 'invitation-1', ...data };
+    }),
+    stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/auth/invitations', {
+      method: 'POST',
+      body: { email: 'learner@example.test', role: 'STUDENT' },
+    });
+    assert.equal(response.status, 201);
+    assert.equal(createdInvitation.email, 'learner@example.test');
+    assert.equal(createdInvitation.roleId, 'student-role');
+    assert.equal((await response.json()).data.emailSent, false);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('Super Admin and other unsupported roles cannot be invited through staff invitations', async () => {
   let invitationCreated = false;
   const restores = [
     restoreAuth(),
+    stubMethod(prisma.role, 'upsert', async () => assert.fail('Unsupported roles must not be created')),
+    stubMethod(prisma.invitation, 'create', async () => {
+      invitationCreated = true;
+      return {};
+    }),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/auth/invitations', {
+      method: 'POST',
+      body: { email: 'admin@example.test', role: 'SUPER_ADMIN' },
+    });
+    assert.equal(response.status, 400);
+    assert.equal(invitationCreated, false);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('students can accept invitations and receive active accounts', async () => {
+  const invitation = {
+    id: 'invitation-1',
+    email: 'learner@example.test',
+    token: 'student-invite-token',
+    roleId: 'student-role',
+    acceptedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+  let createdUser;
+  const restores = [
+    stubMethod(prisma.invitation, 'findUnique', async () => invitation),
     stubMethod(prisma.role, 'findUnique', async () => ({ id: 'student-role', name: 'STUDENT' })),
-    stubMethod(prisma.invitation, 'create', async () => {
-      invitationCreated = true;
-      return {};
+    stubMethod(prisma.user, 'findUnique', async () => null),
+    stubMethod(prisma.user, 'create', async ({ data, include }) => {
+      createdUser = { id: 'student-new', ...data, role: { name: 'STUDENT' } };
+      assert.equal(include.role, true);
+      return createdUser;
     }),
+    stubMethod(prisma.invitation, 'update', async () => invitation),
+    stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
   ];
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/auth/invitations', {
+    const response = await send(server, '/auth/accept-invitation', {
       method: 'POST',
-      body: { email: 'learner@example.test', roleId: 'student-role' },
+      body: {
+        token: invitation.token,
+        password: 'a-secure-test-password',
+        confirmPassword: 'a-secure-test-password',
+      },
     });
-    assert.equal(response.status, 400);
-    assert.equal(invitationCreated, false);
-  } finally {
-    if (server?.listening) await closeServer(server);
-    restores.reverse().forEach((restore) => restore());
-  }
-});
-
-test('only Trainer accounts can be created through staff invitations', async () => {
-  let invitationCreated = false;
-  const restores = [
-    restoreAuth(),
-    stubMethod(prisma.role, 'findUnique', async () => ({ id: 'admin-role', name: 'SUPER_ADMIN' })),
-    stubMethod(prisma.invitation, 'create', async () => {
-      invitationCreated = true;
-      return {};
-    }),
-  ];
-  let server;
-  try {
-    server = await startServer();
-    const response = await send(server, '/auth/invitations', {
-      method: 'POST',
-      body: { email: 'admin@example.test', roleId: 'admin-role' },
+    assert.equal(response.status, 201);
+    assert.equal(createdUser.roleId, 'student-role');
+    assert.equal(createdUser.status, 'ACTIVE');
+    assert.deepEqual((await response.json()).data, {
+      id: 'student-new',
+      role: 'STUDENT',
+      status: 'ACTIVE',
     });
-    assert.equal(response.status, 400);
-    assert.equal(invitationCreated, false);
-  } finally {
-    if (server?.listening) await closeServer(server);
-    restores.reverse().forEach((restore) => restore());
-  }
-});
-
-test('only Super Admins can email student application links', async () => {
-  const restores = [restoreAuth(student)];
-  let server;
-  try {
-    server = await startServer();
-    const response = await send(server, '/auth/student-application-link', {
-      method: 'POST',
-      user: student,
-      body: { email: 'applicant@example.test' },
-    });
-    assert.equal(response.status, 403);
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());

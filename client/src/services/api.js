@@ -120,7 +120,6 @@ export const authAPI = {
   acceptInvitation: async (data) => api.post('/auth/accept-invitation', data),
   approveUser: async (data) => api.post('/auth/users/approve', data),
   createInvitation: async (data) => api.post('/auth/invitations', data),
-  sendStudentApplicationLink: async (data) => api.post('/auth/student-application-link', data),
 };
 
 export const applicationsAPI = {
@@ -330,7 +329,6 @@ export const cohortsAPI = {
 // Users API methods
 export const usersAPI = {
   list: async (filters) => api.get('/users/', { params: filters }),
-  roles: async () => api.get('/users/roles'),
   get: async (id) => api.get(`/users/${id}`),
   update: async (id, form) => api.put(`/users/${id}`, form),
   uploadAvatar: async (id, file) => {

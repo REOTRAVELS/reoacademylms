@@ -16,15 +16,6 @@ const avatarUrlFor = (user) => (
     : null
 );
 
-export const listRoles = async (_req, res) => {
-  const roles = await prisma.role.findMany({
-    where: { name: { in: ['TRAINER', 'STUDENT'] } },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true, description: true },
-  });
-  return ok(res, roles);
-};
-
 export const listUsers = async (req, res) => {
   const role = req.query.role;
   const status = req.query.status;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBrevoTransport, createEmailService } from '../src/services/emailService.js';
 
-test('email service builds password reset, Trainer invitation, and student application emails', async () => {
+test('email service builds password reset and role-specific invitation emails', async () => {
   const messages = [];
   const emailService = createEmailService({
     mailTransport: { sendMail: async (message) => messages.push(message) },
@@ -14,14 +14,17 @@ test('email service builds password reset, Trainer invitation, and student appli
     'person@example.test',
     'https://academy.example.test/reset-password?token=reset-token',
   );
-  await emailService.sendTrainerInvitationEmail(
+  await emailService.sendInvitationEmail(
     'trainer@example.test',
     'https://academy.example.test/accept-invite/invite-token',
     expiresAt,
+    'TRAINER',
   );
-  await emailService.sendStudentApplicationLinkEmail(
-    'applicant@example.test',
-    'https://academy.example.test/register',
+  await emailService.sendInvitationEmail(
+    'student@example.test',
+    'https://academy.example.test/accept-invite/student-token',
+    expiresAt,
+    'STUDENT',
   );
 
   assert.equal(messages.length, 3);
@@ -31,10 +34,12 @@ test('email service builds password reset, Trainer invitation, and student appli
   assert.equal(messages[1].to, 'trainer@example.test');
   assert.match(messages[1].subject, /invited/i);
   assert.match(messages[1].text, /accept-invite\/invite-token/);
+  assert.match(messages[1].text, /as a Trainer/);
   assert.match(messages[1].text, /2027/);
-  assert.equal(messages[2].to, 'applicant@example.test');
-  assert.match(messages[2].text, /\/register/);
-  assert.match(messages[2].text, /does not create an active student account/);
+  assert.equal(messages[2].to, 'student@example.test');
+  assert.match(messages[2].text, /as a Student/);
+  assert.match(messages[2].text, /accept-invite\/student-token/);
+  assert.match(messages[2].text, /approved Program application and an active Program enrollment/);
 });
 
 test('Brevo transport sends transactional email over HTTPS with the verified sender', async () => {

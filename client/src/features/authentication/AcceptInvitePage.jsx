@@ -11,6 +11,8 @@ export default function AcceptInvitePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [valid, setValid] = useState(null);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
     if (!token) {
@@ -24,14 +26,13 @@ export default function AcceptInvitePage() {
     setLoading(true);
     setError('');
     try {
-      const form = new FormData(e.target);
       const data = {
         token,
-        password: form.get('password'),
-        confirmPassword: form.get('confirmPassword'),
+        password,
+        confirmPassword,
       };
-      await authAPI.acceptInvitation(data);
-      navigate('/dashboard');
+      const response = await authAPI.acceptInvitation(data);
+      navigate(response.data.data.role === 'STUDENT' ? '/pending' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to accept invitation.');
     } finally {
@@ -66,8 +67,24 @@ export default function AcceptInvitePage() {
             </div>
           )}
           <form onSubmit={handleSubmit} noValidate>
-            <Input label="New password" type="password" name="password" placeholder="••••••••" required />
-            <Input label="Confirm password" type="password" name="confirmPassword" placeholder="••••••••" required />
+            <Input
+              label="New password"
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              required
+              value={password}
+              onChange={setPassword}
+            />
+            <Input
+              label="Confirm password"
+              type="password"
+              name="confirmPassword"
+              placeholder="••••••••"
+              required
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+            />
             <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }} disabled={loading}>
               {loading ? 'Activating account...' : 'Activate account'}
             </button>

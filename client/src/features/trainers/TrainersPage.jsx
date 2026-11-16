@@ -9,10 +9,10 @@ import DataTable from '../../components/tables/DataTable';
 
 export default function TrainersPage() {
   const [trainers, setTrainers] = useState([]);
-  const [trainerRoleId, setTrainerRoleId] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
+  const [creatingInvitation, setCreatingInvitation] = useState(false);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState('');
   const [invitationUrl, setInvitationUrl] = useState('');
@@ -34,23 +34,14 @@ export default function TrainersPage() {
 
   useEffect(() => { loadTrainers(); }, [loadTrainers]);
 
-  useEffect(() => {
-    usersAPI.roles()
-      .then(({ data }) => {
-        const role = data.data.find((item) => item.name === 'TRAINER');
-        setTrainerRoleId(role?.id || '');
-      })
-      .catch((requestError) => {
-        setError(requestError.response?.data?.message || 'Could not load account roles.');
-      });
-  }, []);
-
   const createInvitation = async (event) => {
     event.preventDefault();
     setError('');
     setNotice('');
+    setInvitationUrl('');
+    setCreatingInvitation(true);
     try {
-      const { data } = await authAPI.createInvitation({ email, roleId: trainerRoleId });
+      const { data } = await authAPI.createInvitation({ email, role: 'TRAINER' });
       setInvitationUrl(data.data.invitationUrl || `${window.location.origin}/accept-invite/${data.data.token}`);
       setEmail('');
       setNotice(data.data.emailSent
@@ -58,6 +49,8 @@ export default function TrainersPage() {
         : 'Invitation created, but email is unavailable. Copy and share the secure link with the trainer.');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not create the trainer invitation.');
+    } finally {
+      setCreatingInvitation(false);
     }
   };
 
@@ -122,7 +115,9 @@ export default function TrainersPage() {
           </div>
           <form className="invite-form" onSubmit={createInvitation}>
             <Input label="Trainer email" type="email" name="email" value={email} onChange={setEmail} placeholder="trainer@example.com" required />
-            <Button type="submit" disabled={!trainerRoleId}>Create invitation</Button>
+            <Button type="submit" disabled={creatingInvitation}>
+              {creatingInvitation ? 'Creating invitation…' : 'Create invitation'}
+            </Button>
           </form>
           {invitationUrl && <div className="invite-link"><input readOnly value={invitationUrl} aria-label="Invitation link" /><Button variant="secondary" onClick={() => navigator.clipboard.writeText(invitationUrl)}>Copy link</Button></div>}
         </section>

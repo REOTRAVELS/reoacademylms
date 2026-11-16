@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 
 const { authAPI } = vi.hoisted(() => ({
-  authAPI: { sendStudentApplicationLink: vi.fn() },
+  authAPI: { createInvitation: vi.fn() },
 }));
 
 vi.mock('../../services/api', () => ({ authAPI }));
@@ -20,33 +20,47 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('StudentInvitationPage', () => {
-  it('emails the application link without creating a student account', async () => {
-    authAPI.sendStudentApplicationLink.mockResolvedValue({ data: { success: true } });
+  it('creates a student invitation and shows the secure link', async () => {
+    authAPI.createInvitation.mockResolvedValue({
+      data: {
+        data: {
+          invitationUrl: 'https://academy.example.test/accept-invite/student-token',
+          emailSent: true,
+        },
+      },
+    });
     render(<MemoryRouter><StudentInvitationPage /></MemoryRouter>);
 
-    fireEvent.change(screen.getByRole('textbox', { name: /Applicant email/i }), {
-      target: { value: 'applicant@example.test' },
+    fireEvent.change(await screen.findByRole('textbox', { name: /Student email/i }), {
+      target: { value: 'student@example.test' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Email application link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create invitation/i }));
 
-    await waitFor(() => expect(authAPI.sendStudentApplicationLink).toHaveBeenCalledWith({
-      email: 'applicant@example.test',
+    await waitFor(() => expect(authAPI.createInvitation).toHaveBeenCalledWith({
+      email: 'student@example.test',
+      role: 'STUDENT',
     }));
-    expect((await screen.findByRole('status')).textContent).toMatch(/application link emailed/i);
+    expect((await screen.findByRole('status')).textContent).toMatch(/invitation emailed/i);
+    expect(screen.getByRole('textbox', { name: /Student invitation link/i }).value)
+      .toBe('https://academy.example.test/accept-invite/student-token');
   });
 
-  it('shows SMTP delivery errors so the administrator can use the copyable link', async () => {
-    authAPI.sendStudentApplicationLink.mockRejectedValue({
-      response: { data: { message: 'Email delivery is not configured.' } },
+  it('shows API errors when a student invitation cannot be created', async () => {
+    authAPI.createInvitation.mockRejectedValue({
+      response: { data: { message: 'An account already exists for this email address.' } },
     });
     render(<MemoryRouter><StudentInvitationPage /></MemoryRouter>);
 
-    fireEvent.change(screen.getByRole('textbox', { name: /Applicant email/i }), {
-      target: { value: 'applicant@example.test' },
+    fireEvent.change(await screen.findByRole('textbox', { name: /Student email/i }), {
+      target: { value: 'student@example.test' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Email application link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create invitation/i }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/Email delivery is not configured/i);
-    expect(screen.getByRole('textbox', { name: /Student application link/i })).toBeTruthy();
+    await waitFor(() => expect(authAPI.createInvitation).toHaveBeenCalledWith({
+      email: 'student@example.test',
+      role: 'STUDENT',
+    }));
+    expect((await screen.findByRole('alert')).textContent)
+      .toMatch(/account already exists/i);
   });
 });

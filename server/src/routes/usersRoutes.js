@@ -15,7 +15,6 @@ const manageOwnAvatar = (req, res, next) => {
   return next();
 };
 
-r.get('/roles', requireRole('SUPER_ADMIN'), asyncHandler(c.listRoles));
 r.get('/', requireRole('SUPER_ADMIN'), asyncHandler(c.listUsers));
 r.get('/:id/avatar', asyncHandler(c.getAvatar));
 r.post('/:id/avatar/upload-intent', manageOwnAvatar, asyncHandler(c.createAvatarUploadIntent));

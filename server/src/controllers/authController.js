@@ -8,8 +8,7 @@ import crypto from 'crypto';
 import {
   isEmailDeliveryConfigured,
   sendPasswordResetEmail,
-  sendStudentApplicationLinkEmail,
-  sendTrainerInvitationEmail,
+  sendInvitationEmail,
 } from '../services/emailService.js';
 import { AdmissionsError, createApplicationInTransaction } from '../services/admissions.js';
 import { getStudentIntakeAccess } from '../utils/intakeAccess.js';
@@ -151,16 +150,19 @@ export const acceptInvitation = async (req, res) => {
   if (inv.expiresAt < new Date()) return fail(res, 'Invitation expired', 410);
   const role = await prisma.role.findUnique({ where: { id: inv.roleId } });
   if (!role) return fail(res, 'Role not found', 500);
-  if (role.name !== 'TRAINER') {
-    return fail(res, 'Only Trainer invitations can be accepted. Students must submit a Program application.', 403);
+  if (!['TRAINER', 'STUDENT'].includes(role.name)) {
+    return fail(res, 'Only Trainer and Student invitations can be accepted.', 403);
   }
+  const existingUser = await prisma.user.findUnique({ where: { email: inv.email }, select: { id: true } });
+  if (existingUser) return fail(res, 'An account already exists for this email address.', 409);
+
   const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
     data: {
       email: inv.email,
       passwordHash,
       firstName: 'Invited',
-      lastName: 'User',
+      lastName: role.name === 'STUDENT' ? 'Student' : 'User',
       roleId: role.id,
       status: 'ACTIVE',
     },
@@ -172,53 +174,41 @@ export const acceptInvitation = async (req, res) => {
   });
   setSession(res, user);
   await audit({ actorId: user.id, action: 'ACCEPT_INVITATION', entity: 'Invitation', entityId: inv.id, ipAddress: req.ip });
-  return ok(res, { id: user.id, role: user.role.name }, 'Invitation accepted', 201);
+  return ok(res, { id: user.id, role: user.role.name, status: user.status }, 'Invitation accepted', 201);
 };
 
 export const createInvitation = async (req, res) => {
-  const { email, roleId } = req.validated.body;
-  const role = await prisma.role.findUnique({ where: { id: roleId } });
-  if (!role) return fail(res, 'Role not found', 404);
-  if (role.name !== 'TRAINER') {
-    return fail(res, 'Only Trainer accounts can be invited. Students must apply through the Program application form.', 400);
-  }
+  const { email, role: roleName } = req.validated.body;
+  const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existingUser) return fail(res, 'An account already exists for this email address.', 409);
+
+  const role = await prisma.role.upsert({
+    where: { name: roleName },
+    update: {},
+    create: { name: roleName },
+  });
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const inv = await prisma.invitation.create({
-    data: { email, token, roleId, invitedById: req.user.id, expiresAt },
+    data: { email, token, roleId: role.id, invitedById: req.user.id, expiresAt },
   });
   await audit({ actorId: req.user.id, action: 'CREATE_INVITATION', entity: 'Invitation', entityId: inv.id, ipAddress: req.ip });
   const invitationUrl = new URL(`/accept-invite/${token}`, env.clientUrl).toString();
   let emailSent = false;
   if (isEmailDeliveryConfigured()) {
     try {
-      await sendTrainerInvitationEmail(email, invitationUrl, expiresAt);
+      await sendInvitationEmail(email, invitationUrl, expiresAt, role.name);
       emailSent = true;
     } catch (error) {
-      console.error('Trainer invitation email delivery failed:', error.code || error.name || 'Unknown error');
+      console.error('Account invitation email delivery failed:', error.code || error.name || 'Unknown error');
     }
   }
   return ok(
     res,
     { id: inv.id, token, invitationUrl, expiresAt, email, emailSent },
-    emailSent ? 'Trainer invitation emailed' : 'Invitation created; share the secure link manually',
+    emailSent ? `${role.name === 'STUDENT' ? 'Student' : 'Trainer'} invitation emailed` : 'Invitation created; share the secure link manually',
     201,
   );
-};
-
-export const sendStudentApplicationLink = async (req, res) => {
-  if (!isEmailDeliveryConfigured()) {
-    return fail(res, 'Email delivery is not configured. Copy and share the student application link instead.', 503);
-  }
-  const { email } = req.validated.body;
-  const applicationUrl = new URL('/register', env.clientUrl).toString();
-  try {
-    await sendStudentApplicationLinkEmail(email, applicationUrl);
-  } catch (error) {
-    console.error('Student application link email delivery failed:', error.code || error.name || 'Unknown error');
-    return fail(res, 'Could not deliver the application link. Please try again or copy and share it manually.', 503);
-  }
-  return ok(res, { email }, 'Student application link emailed');
 };
 
 
