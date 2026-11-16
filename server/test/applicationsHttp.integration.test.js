@@ -399,35 +399,35 @@ test('already reviewed and rejected applications cannot be approved into enrollm
   }
 });
 
-test('an unassigned active legacy student can submit a Program application and becomes pending', async () => {
-  const legacyStudent = {
-    id: 'legacy-student',
+test('an unassigned active student can submit a Program application and becomes pending', async () => {
+  const existingStudent = {
+    id: 'existing-student',
     status: 'ACTIVE',
     role: { name: 'STUDENT' },
   };
   const application = {
-    id: 'legacy-application',
-    studentId: legacyStudent.id,
+    id: 'existing-application',
+    studentId: existingStudent.id,
     programOfferingId: 'offering-1',
     status: 'PENDING',
   };
   let createdApplications = 0;
   let statusHistoryEntries = 0;
   const restores = [
-    stubMethod(prisma.user, 'findUnique', async () => legacyStudent),
+    stubMethod(prisma.user, 'findUnique', async () => existingStudent),
     stubMethod(prisma.programApplication, 'findFirst', async () => application),
     stubMethod(prisma.programEnrollment, 'findFirst', async () => null),
     stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
     stubMethod(prisma, '$transaction', async (operation) => operation({
       user: {
         findUnique: async () => ({
-          id: legacyStudent.id,
-          status: legacyStudent.status,
+          id: existingStudent.id,
+          status: existingStudent.status,
           role: { name: 'STUDENT' },
         }),
         update: async ({ data }) => {
-          legacyStudent.status = data.status;
-          return legacyStudent;
+          existingStudent.status = data.status;
+          return existingStudent;
         },
       },
       programEnrollment: { findFirst: async () => null },
@@ -452,15 +452,15 @@ test('an unassigned active legacy student can submit a Program application and b
     server = await startServer();
     const response = await send(server, '/applications', {
       method: 'POST',
-      user: legacyStudent,
+      user: existingStudent,
       body: { programOfferingId: 'offering-1' },
     });
     assert.equal(response.status, 201);
-    assert.equal(legacyStudent.status, 'PENDING');
+    assert.equal(existingStudent.status, 'PENDING');
     assert.equal(createdApplications, 1);
     assert.equal(statusHistoryEntries, 1);
     assert.equal((await response.json()).data.id, application.id);
-    const status = await send(server, '/applications/me', { user: legacyStudent });
+    const status = await send(server, '/applications/me', { user: existingStudent });
     assert.equal(status.status, 200);
     const statusPayload = await status.json();
     assert.equal(statusPayload.data.academicAccess, false);
@@ -471,8 +471,8 @@ test('an unassigned active legacy student can submit a Program application and b
   }
 });
 
-test('an active legacy student without a Program enrollment cannot use academic APIs', async () => {
-  const activeStudent = { id: 'legacy-student', status: 'ACTIVE', role: { name: 'STUDENT' } };
+test('an active student without a Program enrollment cannot use academic APIs', async () => {
+  const activeStudent = { id: 'existing-student', status: 'ACTIVE', role: { name: 'STUDENT' } };
   const restores = [
     restoreAuth(activeStudent),
     stubMethod(prisma.programEnrollment, 'findFirst', async () => null),
@@ -490,10 +490,10 @@ test('an active legacy student without a Program enrollment cannot use academic 
 });
 
 test('a concurrent application transaction conflict returns a retryable conflict', async () => {
-  const legacyStudent = { id: 'legacy-student', status: 'ACTIVE', role: { name: 'STUDENT' } };
+  const existingStudent = { id: 'existing-student', status: 'ACTIVE', role: { name: 'STUDENT' } };
   const conflict = Object.assign(new Error('serialization conflict'), { code: 'P2034' });
   const restores = [
-    restoreAuth(legacyStudent),
+    restoreAuth(existingStudent),
     stubMethod(prisma, '$transaction', async () => {
       throw conflict;
     }),
@@ -503,7 +503,7 @@ test('a concurrent application transaction conflict returns a retryable conflict
     server = await startServer();
     const response = await send(server, '/applications', {
       method: 'POST',
-      user: legacyStudent,
+      user: existingStudent,
       body: { programOfferingId: 'offering-1' },
     });
     assert.equal(response.status, 409);
@@ -537,7 +537,9 @@ test('Super Admins can create one-time Student invitations', async () => {
     assert.equal(response.status, 201);
     assert.equal(createdInvitation.email, 'learner@example.test');
     assert.equal(createdInvitation.roleId, 'student-role');
-    assert.equal((await response.json()).data.emailSent, false);
+    const payload = await response.json();
+    assert.equal(payload.data.emailSent, false);
+    assert.equal(payload.data.emailStatus, 'not_configured');
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());

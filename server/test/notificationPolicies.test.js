@@ -66,7 +66,7 @@ test('attendance student lists are validated, deduplicated and capped', () => {
   assert.equal(normalizeStudentIds(Array.from({ length: MAX_ATTENDANCE_STUDENTS + 1 }, (_, index) => `student-${index}`)), null);
 });
 
-test('attendance supports per-student status and preserves the legacy batch format', () => {
+test('attendance supports per-student status and preserves the existing batch format', () => {
   assert.deepEqual(normalizeAttendanceRecords([
     { studentId: 'student-1', present: true },
     { studentId: 'student-2', present: false },

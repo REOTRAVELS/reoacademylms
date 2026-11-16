@@ -15,7 +15,7 @@ import StudentsPage from './features/students/StudentsPage';
 import StudentProfilePage from './features/students/StudentProfilePage';
 import ApplicationsPage from './features/students/ApplicationsPage';
 import ProgramAssignmentsPage from './features/students/ProgramAssignmentsPage';
-import LegacyNotificationsPage from './features/notifications/LegacyNotificationsPage';
+import NotificationReviewPage from './features/notifications/NotificationReviewPage';
 import TrainersPage from './features/trainers/TrainersPage';
 import ProgrammesPage from './features/programmes/ProgrammesPage';
 import IntakesPage from './features/intakes/IntakesPage';
@@ -96,7 +96,7 @@ function App() {
               <Route path="/students" element={<StudentsPage />} />
               <Route path="/applications" element={<ApplicationsPage />} />
               <Route path="/program-assignments" element={<ProgramAssignmentsPage />} />
-              <Route path="/notifications/admin" element={<LegacyNotificationsPage />} />
+              <Route path="/notifications/admin" element={<NotificationReviewPage />} />
               <Route path="/students/new" element={<StudentInvitationPage />} />
               <Route path="/students/:id" element={<StudentProfilePage />} />
               <Route path="/trainers" element={<TrainersPage />} />

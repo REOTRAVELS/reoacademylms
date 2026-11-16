@@ -5,10 +5,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 const { programEnrollmentsAPI } = vi.hoisted(() => ({
   programEnrollmentsAPI: {
-    legacyStudents: vi.fn(),
+    unassignedStudents: vi.fn(),
     assignableOfferings: vi.fn(),
     assignmentHistory: vi.fn(),
-    assignLegacyStudent: vi.fn(),
+    assignUnassignedStudent: vi.fn(),
   },
 }));
 
@@ -17,7 +17,7 @@ vi.mock('../../services/api', () => ({ programEnrollmentsAPI }));
 import ProgramAssignmentsPage from './ProgramAssignmentsPage';
 
 const student = {
-  id: 'legacy-student',
+  id: 'existing-student',
   firstName: 'Ada',
   lastName: 'Learner',
   email: 'ada@example.test',
@@ -33,7 +33,7 @@ const offering = {
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
-  programEnrollmentsAPI.legacyStudents.mockResolvedValue({
+  programEnrollmentsAPI.unassignedStudents.mockResolvedValue({
     data: { data: { items: [student], nextCursor: null } },
   });
   afterEach(cleanup);
@@ -43,7 +43,7 @@ beforeEach(() => {
   programEnrollmentsAPI.assignmentHistory.mockResolvedValue({
     data: { data: { items: [], nextCursor: null } },
   });
-  programEnrollmentsAPI.assignLegacyStudent.mockResolvedValue({ data: { success: true } });
+  programEnrollmentsAPI.assignUnassignedStudent.mockResolvedValue({ data: { success: true } });
 });
 
 describe('ProgramAssignmentsPage', () => {
@@ -57,10 +57,10 @@ describe('ProgramAssignmentsPage', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.getByText('Travel Operations')).toBeTruthy();
     expect(screen.getByText('GATE 01 WINTER 2027')).toBeTruthy();
-    expect(programEnrollmentsAPI.assignLegacyStudent).not.toHaveBeenCalled();
+    expect(programEnrollmentsAPI.assignUnassignedStudent).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Confirm assignment/i }));
-    await waitFor(() => expect(programEnrollmentsAPI.assignLegacyStudent).toHaveBeenCalledWith(
+    await waitFor(() => expect(programEnrollmentsAPI.assignUnassignedStudent).toHaveBeenCalledWith(
       student.id,
       { programOfferingId: offering.id },
     ));

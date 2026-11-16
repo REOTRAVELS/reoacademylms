@@ -109,7 +109,7 @@ export default function StudentsPage() {
         </div>
         <div className="table-actions">
           <Link className="btn btn-secondary" to="/students/new"><UserRoundPlus size={17} /> Invite student</Link>
-          <Link className="btn btn-secondary" to="/program-assignments"><UserCheck size={17} /> Assign legacy students</Link>
+          <Link className="btn btn-secondary" to="/program-assignments"><UserCheck size={17} /> Assign existing students</Link>
           <Link className="btn btn-primary" to="/applications"><UserRoundPlus size={17} /> Review applications</Link>
         </div>
       </section>

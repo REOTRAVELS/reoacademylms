@@ -241,8 +241,8 @@ test('active Program membership blocks unassigned and cross-Program API requests
   try {
     server = await startServer();
 
-    const legacyCourse = await send(server, '/courses/course-b');
-    assert.equal(legacyCourse.status, 403);
+    const inaccessibleCourse = await send(server, '/courses/course-b');
+    assert.equal(inaccessibleCourse.status, 403);
     assert.equal((await send(server, '/resources/resource-b/download')).status, 403);
     assert.equal((await send(server, '/assessments/assessment-b')).status, 403);
     assert.equal((await send(server, '/progress/me')).status, 403);

@@ -29,7 +29,7 @@ const offeringLabel = (offering) => (
   `${offering.programme.title} — GATE ${String(offering.intake.gateNumber).padStart(2, '0')} ${offering.intake.season} ${offering.intake.year}`
 );
 
-export default function LegacyNotificationsPage() {
+export default function NotificationReviewPage() {
   const [notifications, setNotifications] = useState([]);
   const [programmes, setProgrammes] = useState([]);
   const [offerings, setOfferings] = useState([]);
@@ -46,7 +46,7 @@ export default function LegacyNotificationsPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await notificationsAPI.listLegacy({
+      const { data } = await notificationsAPI.listForReview({
         status,
         limit: 20,
         cursor: pageCursor || undefined,
@@ -55,7 +55,7 @@ export default function LegacyNotificationsPage() {
       setCursor(pageCursor);
       setNextCursor(data.data.nextCursor);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not load legacy notifications.');
+      setError(requestError.response?.data?.message || 'Could not load notifications for review.');
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ export default function LegacyNotificationsPage() {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const { data } = await notificationsAPI.legacyClassificationOptions();
+        const { data } = await notificationsAPI.classificationOptions();
         setProgrammes(data.data.programmes);
         setOfferings(data.data.offerings);
       } catch (requestError) {
@@ -102,7 +102,7 @@ export default function LegacyNotificationsPage() {
     setError('');
     setNotice('');
     try {
-      await notificationsAPI.classifyLegacy(notification.id, payload);
+      await notificationsAPI.classify(notification.id, payload);
       setNotice(`Audience classification saved for "${notification.title}".`);
       setChoices((current) => {
         const next = { ...current };
@@ -130,7 +130,7 @@ export default function LegacyNotificationsPage() {
       <section className="page-heading">
         <div>
           <span className="eyebrow">Communications governance</span>
-          <h1>Legacy notification review</h1>
+          <h1>Notification review</h1>
           <p>Historical notifications stay stored and hidden from students until an administrator explicitly classifies their audience.</p>
         </div>
       </section>
@@ -172,7 +172,7 @@ export default function LegacyNotificationsPage() {
               <p>Recipient: {notification.user.firstName} {notification.user.lastName} · {notification.user.email}</p>
               <p>Current audience: <strong>{classificationLabel(notification, programmes, offerings)}</strong></p>
             </header>
-            {notification.body && <p className="notification-legacy-body">{notification.body}</p>}
+            {notification.body && <p className="notification-body">{notification.body}</p>}
 
             <div className="intake-form-grid">
               <label className="field">

@@ -6,9 +6,9 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 
 const r = Router();
 r.use(authenticate, requireRole('SUPER_ADMIN'));
-r.get('/legacy-students', asyncHandler(c.listLegacyStudents));
+r.get('/unassigned-students', asyncHandler(c.listUnassignedStudents));
 r.get('/offerings', asyncHandler(c.listAssignableOfferings));
 r.get('/assignment-history', asyncHandler(c.listAssignmentHistory));
-r.post('/legacy-students/:studentId/assign', asyncHandler(c.assignLegacyStudent));
+r.post('/unassigned-students/:studentId/assign', asyncHandler(c.assignUnassignedStudent));
 
 export default r;

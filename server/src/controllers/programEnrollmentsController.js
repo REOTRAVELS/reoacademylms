@@ -2,7 +2,7 @@ import prisma from '../config/database.js';
 import { fail, ok } from '../utils/response.js';
 import { parseListOptions, parseOptionalId } from '../utils/notificationPolicies.js';
 
-const legacyStudentWhere = (search) => ({
+const unassignedStudentWhere = (search) => ({
   status: 'ACTIVE',
   role: { name: 'STUDENT' },
   enrolments: { some: {} },
@@ -17,7 +17,7 @@ const legacyStudentWhere = (search) => ({
   } : {}),
 });
 
-export const listLegacyStudents = async (req, res) => {
+export const listUnassignedStudents = async (req, res) => {
   const search = req.query.search;
   const pagination = parseListOptions(req.query, 25);
   if (
@@ -29,7 +29,7 @@ export const listLegacyStudents = async (req, res) => {
     ))
   ) return fail(res, 'Invalid student search or pagination options', 400);
 
-  const where = legacyStudentWhere(search || '');
+  const where = unassignedStudentWhere(search || '');
   if (pagination.cursor) {
     const cursor = await prisma.user.findFirst({
       where: { ...where, id: pagination.cursor.id },
@@ -166,7 +166,7 @@ export const listAssignmentHistory = async (req, res) => {
   });
 };
 
-export const assignLegacyStudent = async (req, res) => {
+export const assignUnassignedStudent = async (req, res) => {
   const { studentId } = req.params;
   const body = req.body;
   const programOfferingId = parseOptionalId(body?.programOfferingId);
@@ -222,7 +222,7 @@ export const assignLegacyStudent = async (req, res) => {
         return { error: 'Only active student accounts can be manually assigned', status: 409 };
       }
       if (!student.enrolments.length) {
-        return { error: 'This student has no legacy Cohort enrolment', status: 409 };
+        return { error: 'This student has no existing Cohort enrollment', status: 409 };
       }
       if (student.programEnrollments.some(({ status }) => status === 'ACTIVE')) {
         return { error: 'This student already has an active Program enrollment', status: 409 };
@@ -279,7 +279,7 @@ export const assignLegacyStudent = async (req, res) => {
           submittedAt: application.submittedAt?.toISOString() ?? null,
           reviewedAt: application.reviewedAt?.toISOString() ?? null,
         })),
-        legacyCohorts: student.enrolments.map(({ cohortId, cohort }) => ({
+        previousCohorts: student.enrolments.map(({ cohortId, cohort }) => ({
           cohortId,
           cohortName: cohort.name,
         })),

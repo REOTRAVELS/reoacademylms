@@ -31,7 +31,7 @@ export default function ProgramAssignmentsPage() {
     else setLoading(true);
     setError('');
     try {
-      const { data } = await programEnrollmentsAPI.legacyStudents({
+      const { data } = await programEnrollmentsAPI.unassignedStudents({
         search: term.trim() || undefined,
         limit: 25,
         cursor: pageCursor || undefined,
@@ -40,7 +40,7 @@ export default function ProgramAssignmentsPage() {
       setCursor(pageCursor);
       setNextCursor(data.data.nextCursor);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not load eligible legacy students.');
+      setError(requestError.response?.data?.message || 'Could not load eligible students.');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -92,7 +92,7 @@ export default function ProgramAssignmentsPage() {
     setError('');
     setNotice('');
     try {
-      await programEnrollmentsAPI.assignLegacyStudent(confirmation.student.id, {
+      await programEnrollmentsAPI.assignUnassignedStudent(confirmation.student.id, {
         programOfferingId: selectedOffering.id,
       });
       setNotice(`${confirmation.student.firstName} ${confirmation.student.lastName} was assigned to ${selectedOffering.programme.title}.`);
@@ -116,7 +116,7 @@ export default function ProgramAssignmentsPage() {
   const columns = [
     {
       key: 'student',
-      label: 'Legacy student',
+      label: 'Existing student',
       render: (student) => (
         <div className="person-cell">
           <span className="person-avatar">{`${student.firstName?.[0] || ''}${student.lastName?.[0] || ''}`.toUpperCase()}</span>
@@ -201,14 +201,14 @@ export default function ProgramAssignmentsPage() {
       <section className="page-heading">
         <div>
           <span className="eyebrow">People &amp; access</span>
-          <h1>Legacy student Program assignments</h1>
-          <p>Assign an active legacy student to one Program Offering to enable Program-scoped learning access.</p>
+          <h1>Existing student Program assignments</h1>
+          <p>Assign an active student without a Program enrollment to one Program Offering.</p>
         </div>
       </section>
 
       {!loading && offerings.length === 0 && (
         <div className="notice notice-warning">
-          No active Program Offerings are currently available for legacy student assignment.
+          No active Program Offerings are currently available for student assignment.
         </div>
       )}
 
@@ -220,7 +220,7 @@ export default function ProgramAssignmentsPage() {
             value={search}
             onChange={(event) => { setSearch(event.target.value); setCursor(null); }}
             placeholder="Search name or email"
-            aria-label="Search eligible legacy students"
+            aria-label="Search eligible students"
           />
         </label>
       </section>
@@ -231,7 +231,7 @@ export default function ProgramAssignmentsPage() {
         columns={columns}
         data={students}
         loading={loading}
-        emptyMessage="No active legacy students without a Program enrollment were found."
+        emptyMessage="No active students without a Program enrollment were found."
       />
       {nextCursor && (
         <div className="table-actions">
@@ -256,7 +256,7 @@ export default function ProgramAssignmentsPage() {
           columns={historyColumns}
           data={history}
           loading={loadingHistory}
-          emptyMessage="No manual legacy-student assignments have been recorded."
+          emptyMessage="No manual student assignments have been recorded."
         />
         {nextHistoryCursor && (
           <div className="table-actions">

@@ -44,7 +44,7 @@ const buildMigrationPlan = async () => {
       type: 'resource',
       id: resource.id,
       filePath,
-      key: `course-resources/${resource.uploadedById}/legacy-${safeKeySegment(resource.id)}${extension}`,
+      key: `course-resources/${resource.uploadedById}/migrated-${safeKeySegment(resource.id)}${extension}`,
       contentType: resource.mimeType,
     });
   }
@@ -81,7 +81,7 @@ const buildMigrationPlan = async () => {
       type: 'avatar',
       id: user.id,
       filePath,
-      key: `avatars/${user.id}/legacy-${safeKeySegment(user.id)}${extension}`,
+      key: `avatars/${user.id}/migrated-${safeKeySegment(user.id)}${extension}`,
       contentType,
     });
   }

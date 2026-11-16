@@ -133,9 +133,9 @@ export const applicationsAPI = {
 };
 
 export const programEnrollmentsAPI = {
-  legacyStudents: async (params = {}) => api.get('/program-enrollments/legacy-students', { params }),
-  assignLegacyStudent: async (studentId, data) =>
-    api.post(`/program-enrollments/legacy-students/${studentId}/assign`, data),
+  unassignedStudents: async (params = {}) => api.get('/program-enrollments/unassigned-students', { params }),
+  assignUnassignedStudent: async (studentId, data) =>
+    api.post(`/program-enrollments/unassigned-students/${studentId}/assign`, data),
   assignableOfferings: async () => api.get('/program-enrollments/offerings'),
   assignmentHistory: async (params = {}) => api.get('/program-enrollments/assignment-history', { params }),
 };
@@ -153,9 +153,9 @@ export const notificationsAPI = {
   unreadCount: async () => api.get('/notifications/unread-count'),
   markRead: async (id) => api.put(`/notifications/${id}/read`),
   markAllRead: async () => api.put('/notifications/read-all'),
-  listLegacy: async (params = {}) => api.get('/notifications/admin/legacy', { params }),
-  legacyClassificationOptions: async () => api.get('/notifications/admin/legacy/options'),
-  classifyLegacy: async (id, data) => api.post(`/notifications/admin/${id}/classification`, data),
+  listForReview: async (params = {}) => api.get('/notifications/admin/review', { params }),
+  classificationOptions: async () => api.get('/notifications/admin/review/options'),
+  classify: async (id, data) => api.post(`/notifications/admin/${id}/classification`, data),
   listAnnouncements: async (params = {}) => api.get('/notifications/announcements', { params }),
   createAnnouncement: async (data) =>
     api.post('/notifications/announcements', data),

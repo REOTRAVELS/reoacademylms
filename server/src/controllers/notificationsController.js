@@ -89,7 +89,7 @@ const classificationSnapshot = (notification) => ({
   programOfferingId: notification.programOfferingId,
 });
 
-export const listLegacyNotifications = async (req, res) => {
+export const listNotificationsForReview = async (req, res) => {
   const pagination = parseListOptions(req.query, 25);
   const status = req.query.status || 'UNCLASSIFIED';
   if (!pagination || !['UNCLASSIFIED', 'CLASSIFIED', 'ARCHIVED', 'ALL'].includes(status)) {
@@ -157,7 +157,7 @@ export const listNotificationClassificationOptions = async (_req, res) => {
 
 class ClassificationConflictError extends Error {}
 
-export const classifyLegacyNotification = async (req, res) => {
+export const classifyNotification = async (req, res) => {
   const { audienceType } = req.body || {};
   const allowedFields = {
     GLOBAL: ['audienceType'],

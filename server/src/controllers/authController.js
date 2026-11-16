@@ -195,18 +195,31 @@ export const createInvitation = async (req, res) => {
   await audit({ actorId: req.user.id, action: 'CREATE_INVITATION', entity: 'Invitation', entityId: inv.id, ipAddress: req.ip });
   const invitationUrl = new URL(`/accept-invite/${token}`, env.clientUrl).toString();
   let emailSent = false;
+  let emailStatus = 'not_configured';
   if (isEmailDeliveryConfigured()) {
     try {
       await sendInvitationEmail(email, invitationUrl, expiresAt, role.name);
       emailSent = true;
+      emailStatus = 'sent';
     } catch (error) {
-      console.error('Account invitation email delivery failed:', error.code || error.name || 'Unknown error');
+      emailStatus = 'failed';
+      console.error(JSON.stringify({
+        event: 'account_invitation_email_failed',
+        invitationId: inv.id,
+        role: role.name,
+        errorName: typeof error.name === 'string' ? error.name : 'Error',
+        ...(typeof error.code === 'string' ? { errorCode: error.code } : {}),
+      }));
     }
   }
   return ok(
     res,
-    { id: inv.id, token, invitationUrl, expiresAt, email, emailSent },
-    emailSent ? `${role.name === 'STUDENT' ? 'Student' : 'Trainer'} invitation emailed` : 'Invitation created; share the secure link manually',
+    { id: inv.id, token, invitationUrl, expiresAt, email, emailSent, emailStatus },
+    emailStatus === 'sent'
+      ? `${role.name === 'STUDENT' ? 'Student' : 'Trainer'} invitation emailed`
+      : emailStatus === 'failed'
+        ? 'Invitation created, but the email provider failed to send it.'
+        : 'Invitation created, but email delivery is not configured.',
     201,
   );
 };

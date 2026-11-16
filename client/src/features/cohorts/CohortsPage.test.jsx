@@ -16,7 +16,7 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: { role: 'SUPER_A
 import CohortsPage from './CohortsPage';
 
 const cohort = {
-  id: 'legacy-cohort',
+  id: 'existing-cohort',
   name: 'Historic group',
   programmeId: 'programme-1',
   programme: { id: 'programme-1', title: 'Travel Operations', status: 'ACTIVE' },
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('CohortsPage offering scoping', () => {
-  it('lets an administrator explicitly associate a legacy teaching group with an offering', async () => {
+  it('lets an administrator explicitly associate an existing teaching group with an offering', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<MemoryRouter><CohortsPage /></MemoryRouter>);
 

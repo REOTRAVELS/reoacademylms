@@ -44,9 +44,11 @@ export default function TrainersPage() {
       const { data } = await authAPI.createInvitation({ email, role: 'TRAINER' });
       setInvitationUrl(data.data.invitationUrl || `${window.location.origin}/accept-invite/${data.data.token}`);
       setEmail('');
-      setNotice(data.data.emailSent
+      setNotice(data.data.emailStatus === 'sent' || data.data.emailSent
         ? 'Invitation emailed to the trainer. You can also copy the secure link below.'
-        : 'Invitation created, but email is unavailable. Copy and share the secure link with the trainer.');
+        : data.data.emailStatus === 'failed'
+          ? 'Invitation created, but the email provider failed to send it. Copy the link below and check Vercel logs.'
+          : 'Invitation created, but email is not configured. Add the email settings in Vercel, or copy the link below.');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not create the trainer invitation.');
     } finally {

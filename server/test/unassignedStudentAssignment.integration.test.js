@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.JWT_SECRET ||= 'legacy-assignment-integration-secret';
+process.env.JWT_SECRET ||= 'unassigned-assignment-integration-secret';
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 
 const [{ default: app }, { default: prisma }, { signToken }] = await Promise.all([
@@ -48,15 +48,15 @@ const send = (server, path, { method = 'GET', body, user = users.admin } = {}) =
   },
 );
 
-test('legacy assignment records an explicit offering and immutable before/after history atomically', async () => {
+test('existing student assignment records an explicit offering and immutable history atomically', async () => {
   const events = [];
   let enrollmentData;
   let historyData;
   const targetStudent = {
-    id: 'student-legacy',
+    id: 'student-existing',
     status: 'ACTIVE',
     role: { name: 'STUDENT' },
-    enrolments: [{ cohortId: 'legacy-cohort', cohort: { id: 'legacy-cohort', name: 'Old cohort label' } }],
+    enrolments: [{ cohortId: 'previous-cohort', cohort: { id: 'previous-cohort', name: 'Old cohort label' } }],
     programApplications: [{
       id: 'old-application',
       status: 'REJECTED',
@@ -109,25 +109,25 @@ test('legacy assignment records an explicit offering and immutable before/after 
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const response = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'selected-offering' },
     });
     assert.equal(response.status, 201);
     assert.deepEqual(events, ['enrollment', 'history']);
     assert.deepEqual(enrollmentData, {
-      studentId: 'student-legacy',
+      studentId: 'student-existing',
       programOfferingId: 'selected-offering',
       intakeId: 'derived-intake',
       programmeId: 'derived-program',
       status: 'ACTIVE',
     });
     assert.equal(historyData.assignedById, users.admin.id);
-    assert.equal(historyData.studentId, 'student-legacy');
+    assert.equal(historyData.studentId, 'student-existing');
     assert.equal(historyData.previousState.activeProgramEnrollment, null);
     assert.equal(historyData.previousState.historicalProgramEnrollments[0].id, 'old-enrollment');
     assert.equal(historyData.previousState.previousApplications[0].id, 'old-application');
-    assert.equal(historyData.previousState.legacyCohorts[0].cohortId, 'legacy-cohort');
+    assert.equal(historyData.previousState.previousCohorts[0].cohortId, 'previous-cohort');
     assert.equal(historyData.newAssignment.programmeTitle, 'Navigation');
     assert.equal(historyData.newAssignment.intake.year, 2027);
     assert.equal('enrolments' in enrollmentData, false);
@@ -137,25 +137,25 @@ test('legacy assignment records an explicit offering and immutable before/after 
   }
 });
 
-test('assignment candidates are restricted to active legacy students without active Program enrollment', async () => {
+test('assignment candidates are restricted to active existing students without Program enrollment', async () => {
   let query;
   const restores = [
     stubMethod(prisma.user, 'findUnique', async () => users.admin),
     stubMethod(prisma.user, 'findMany', async (args) => {
       query = args;
-      return [{ id: 'legacy-student', firstName: 'Legacy', enrolments: [{ cohortId: 'old-cohort' }] }];
+      return [{ id: 'existing-student', firstName: 'Ada', enrolments: [{ cohortId: 'old-cohort' }] }];
     }),
   ];
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/program-enrollments/legacy-students?search=Legacy');
+    const response = await send(server, '/program-enrollments/unassigned-students?search=Ada');
     assert.equal(response.status, 200);
     assert.equal(query.where.status, 'ACTIVE');
     assert.deepEqual(query.where.role, { name: 'STUDENT' });
     assert.deepEqual(query.where.enrolments, { some: {} });
     assert.deepEqual(query.where.programEnrollments, { none: { status: 'ACTIVE' } });
-    assert.equal(query.where.OR[0].firstName.contains, 'Legacy');
+    assert.equal(query.where.OR[0].firstName.contains, 'Ada');
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
@@ -166,9 +166,9 @@ test('assignment history can be reviewed with both the student and responsible a
   let query;
   const history = [{
     id: 'assignment-history-1',
-    student: { id: 'legacy-student', firstName: 'Legacy', lastName: 'Learner', email: 'legacy@example.test' },
+    student: { id: 'existing-student', firstName: 'Ada', lastName: 'Learner', email: 'ada@example.test' },
     assignedBy: { id: users.admin.id, firstName: 'Ada', lastName: 'Admin' },
-    previousState: { legacyCohorts: [{ cohortId: 'old-cohort' }] },
+    previousState: { previousCohorts: [{ cohortId: 'old-cohort' }] },
     newAssignment: { programmeId: 'programme-1' },
     enrollment: { programOffering: { programme: { title: 'Program' } } },
   }];
@@ -182,9 +182,9 @@ test('assignment history can be reviewed with both the student and responsible a
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/program-enrollments/assignment-history?search=Legacy');
+    const response = await send(server, '/program-enrollments/assignment-history?search=Ada');
     assert.equal(response.status, 200);
-    assert.deepEqual(query.where.student.is.OR[0].firstName.contains, 'Legacy');
+    assert.deepEqual(query.where.student.is.OR[0].firstName.contains, 'Ada');
     assert.equal(query.select.assignedBy.select.email, true);
     assert.equal(query.select.previousState, true);
     assert.equal((await response.json()).data.items[0].assignedBy.id, users.admin.id);
@@ -198,7 +198,7 @@ test('only Super Admins can assign, clients cannot supply Program or Intake ids,
   let transactionCount = 0;
   let enrollmentCount = 0;
   let existingStudent = {
-    id: 'student-legacy',
+    id: 'student-existing',
     status: 'ACTIVE',
     role: { name: 'STUDENT' },
     enrolments: [{ cohortId: 'old-cohort', cohort: { id: 'old-cohort', name: 'Old cohort' } }],
@@ -237,21 +237,21 @@ test('only Super Admins can assign, clients cannot supply Program or Intake ids,
   try {
     server = await startServer();
     for (const user of [users.trainer, users.student]) {
-      const forbidden = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+      const forbidden = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
         method: 'POST',
         user,
         body: { programOfferingId: 'selected-offering' },
       });
       assert.equal(forbidden.status, 403);
     }
-    const selfAssignment = await send(server, '/program-enrollments/legacy-students/student-1/assign', {
+    const selfAssignment = await send(server, '/program-enrollments/unassigned-students/student-1/assign', {
       method: 'POST',
       user: users.student,
       body: { programOfferingId: 'selected-offering' },
     });
     assert.equal(selfAssignment.status, 403);
 
-    const mismatchedIds = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const mismatchedIds = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'selected-offering', programmeId: 'attacker-program', intakeId: 'attacker-intake' },
     });
@@ -259,7 +259,7 @@ test('only Super Admins can assign, clients cannot supply Program or Intake ids,
     assert.equal(transactionCount, 0);
 
     existingStudent = { ...existingStudent, programEnrollments: [{ id: 'active', status: 'ACTIVE' }] };
-    const duplicate = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const duplicate = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'selected-offering' },
     });
@@ -272,7 +272,7 @@ test('only Super Admins can assign, clients cannot supply Program or Intake ids,
       programEnrollments: [],
       programApplications: [{ id: 'pending-application', status: 'PENDING' }],
     };
-    const pendingApplication = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const pendingApplication = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'selected-offering' },
     });
@@ -288,7 +288,7 @@ test('only Super Admins can assign, clients cannot supply Program or Intake ids,
 test('assignment rejects missing and inactive offerings without writing enrollment or history', async () => {
   let enrollmentWrites = 0;
   const student = {
-    id: 'student-legacy',
+    id: 'student-existing',
     status: 'ACTIVE',
     role: { name: 'STUDENT' },
     enrolments: [{ cohortId: 'old-cohort', cohort: { id: 'old-cohort', name: 'Old cohort' } }],
@@ -323,11 +323,11 @@ test('assignment rejects missing and inactive offerings without writing enrollme
   let server;
   try {
     server = await startServer();
-    const missing = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const missing = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'missing-offering' },
     });
-    const inactive = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const inactive = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'inactive-offering' },
     });
@@ -352,7 +352,7 @@ test('an active enrollment uniqueness race returns conflict without treating ass
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/program-enrollments/legacy-students/student-legacy/assign', {
+    const response = await send(server, '/program-enrollments/unassigned-students/student-existing/assign', {
       method: 'POST',
       body: { programOfferingId: 'selected-offering' },
     });

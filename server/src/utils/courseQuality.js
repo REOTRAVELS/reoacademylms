@@ -63,14 +63,14 @@ const makeIssue = (
 });
 
 const normalizeContentBlocks = (content) => {
-  if (Array.isArray(content)) return { blocks: content, legacy: false };
-  if (typeof content !== 'string' || !content.trim()) return { blocks: [], legacy: false };
+  if (Array.isArray(content)) return { blocks: content, usedCompatibilityFormat: false };
+  if (typeof content !== 'string' || !content.trim()) return { blocks: [], usedCompatibilityFormat: false };
   const parsed = parseJson(content);
-  if (parsed.valid && Array.isArray(parsed.value)) return { blocks: parsed.value, legacy: false };
+  if (parsed.valid && Array.isArray(parsed.value)) return { blocks: parsed.value, usedCompatibilityFormat: false };
   if (!parsed.valid && !/^\s*[\[{]/.test(content)) {
-    return { blocks: [{ type: 'rich_text', content }], legacy: true };
+    return { blocks: [{ type: 'rich_text', content }], usedCompatibilityFormat: true };
   }
-  return { blocks: [], legacy: false, malformed: true };
+  return { blocks: [], usedCompatibilityFormat: false, malformed: true };
 };
 
 const getCompletionSettings = (value) => {
@@ -506,7 +506,7 @@ export const validateCourseQuality = (course) => {
       }
       if (!lesson.isPublished) continue;
 
-      const { blocks, legacy, malformed } = normalizeContentBlocks(lesson.content);
+      const { blocks, usedCompatibilityFormat, malformed } = normalizeContentBlocks(lesson.content);
       if (!blocks.length) {
         push(makeIssue(
           'ERROR',
@@ -517,10 +517,10 @@ export const validateCourseQuality = (course) => {
           'Lesson',
         ));
       } else {
-        if (legacy) {
+        if (usedCompatibilityFormat) {
           push(makeIssue(
             'WARNING',
-            'legacy_lesson_content',
+            'compatibility_lesson_content',
             `Convert “${lesson.title}” to structured content blocks for richer playback.`,
             4,
             lesson.id,

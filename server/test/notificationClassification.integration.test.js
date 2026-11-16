@@ -48,19 +48,19 @@ const send = (server, path, { method = 'GET', body, user = users.admin } = {}) =
   },
 );
 
-test('notification review lists old records as unclassified instead of exposing them as global', async () => {
+test('notification review lists existing records as unclassified instead of exposing them as global', async () => {
   let query;
   const restores = [
     stubMethod(prisma.user, 'findUnique', async () => users.admin),
     stubMethod(prisma.notification, 'findMany', async (args) => {
       query = args;
-      return [{ id: 'legacy-notification', audienceStatus: 'UNCLASSIFIED', isGlobal: false }];
+      return [{ id: 'notification-1', audienceStatus: 'UNCLASSIFIED', isGlobal: false }];
     }),
   ];
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/notifications/admin/legacy');
+    const response = await send(server, '/notifications/admin/review');
     assert.equal(response.status, 200);
     assert.deepEqual(query.where, { audienceStatus: 'UNCLASSIFIED' });
     assert.ok(query.select.classificationHistory);
@@ -77,7 +77,7 @@ test('offering classification derives Program from the persisted offering and at
   let historyArgs;
   let offeringQuery;
   const current = {
-    id: 'legacy-notification',
+    id: 'notification-1',
     audienceStatus: 'UNCLASSIFIED',
     isGlobal: false,
     programmeId: null,
@@ -112,7 +112,7 @@ test('offering classification derives Program from the persisted offering and at
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const response = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       body: { audienceType: 'OFFERING', programOfferingId: 'offering-1' },
     });
@@ -155,7 +155,7 @@ test('global classification is explicit and records the administrator in append-
     stubMethod(prisma, '$transaction', async (operation) => operation({
       notification: {
         findUnique: async () => ({
-          id: 'legacy-notification',
+          id: 'notification-1',
           audienceStatus: 'UNCLASSIFIED',
           isGlobal: false,
           programmeId: null,
@@ -179,7 +179,7 @@ test('global classification is explicit and records the administrator in append-
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const response = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       body: { audienceType: 'GLOBAL' },
     });
@@ -208,7 +208,7 @@ test('classification rejects forged Program ids, non-admin requests and concurre
       return operation({
         notification: {
           findUnique: async () => ({
-            id: 'legacy-notification',
+            id: 'notification-1',
             audienceStatus: 'UNCLASSIFIED',
             isGlobal: false,
             programmeId: null,
@@ -233,33 +233,33 @@ test('classification rejects forged Program ids, non-admin requests and concurre
   let server;
   try {
     server = await startServer();
-    const forbidden = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const forbidden = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       user: users.student,
       body: { audienceType: 'GLOBAL' },
     });
     assert.equal(forbidden.status, 403);
-    const trainerForbidden = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const trainerForbidden = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       user: users.trainer,
       body: { audienceType: 'GLOBAL' },
     });
     assert.equal(trainerForbidden.status, 403);
 
-    const forged = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const forged = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       body: { audienceType: 'OFFERING', programOfferingId: 'offering-1', programmeId: 'forged-program' },
     });
     assert.equal(forged.status, 400);
     assert.equal(transactionCount, 0);
 
-    const unknownOffering = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const unknownOffering = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       body: { audienceType: 'OFFERING', programOfferingId: 'missing-offering' },
     });
     assert.equal(unknownOffering.status, 404);
 
-    const conflict = await send(server, '/notifications/admin/legacy-notification/classification', {
+    const conflict = await send(server, '/notifications/admin/notification-1/classification', {
       method: 'POST',
       body: { audienceType: 'PROGRAMME', programmeId: 'programme-1' },
     });

@@ -5,15 +5,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 const { notificationsAPI } = vi.hoisted(() => ({
   notificationsAPI: {
-    listLegacy: vi.fn(),
-    legacyClassificationOptions: vi.fn(),
-    classifyLegacy: vi.fn(),
+    listForReview: vi.fn(),
+    classificationOptions: vi.fn(),
+    classify: vi.fn(),
   },
 }));
 
 vi.mock('../../services/api', () => ({ notificationsAPI }));
 
-import LegacyNotificationsPage from './LegacyNotificationsPage';
+import NotificationReviewPage from './NotificationReviewPage';
 
 const notification = {
   id: 'old-notification',
@@ -41,19 +41,19 @@ const offering = {
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
-  notificationsAPI.listLegacy.mockResolvedValue({
+  notificationsAPI.listForReview.mockResolvedValue({
     data: { data: { items: [notification], nextCursor: null } },
   });
   afterEach(cleanup);
-  notificationsAPI.legacyClassificationOptions.mockResolvedValue({
+  notificationsAPI.classificationOptions.mockResolvedValue({
     data: { data: { programmes: [programme], offerings: [offering] } },
   });
-  notificationsAPI.classifyLegacy.mockResolvedValue({ data: { success: true } });
+  notificationsAPI.classify.mockResolvedValue({ data: { success: true } });
 });
 
-describe('LegacyNotificationsPage', () => {
+describe('NotificationReviewPage', () => {
   it('requires an explicit audience and sends global classification only after selection', async () => {
-    render(<LegacyNotificationsPage />);
+    render(<NotificationReviewPage />);
     const audience = await screen.findByRole('combobox', { name: /Audience classification for Welcome update/i });
     const save = screen.getByRole('button', { name: /Save classification/i });
 
@@ -65,14 +65,14 @@ describe('LegacyNotificationsPage', () => {
     fireEvent.change(audience, { target: { value: 'GLOBAL' } });
     expect(save.disabled).toBe(false);
     fireEvent.click(save);
-    await waitFor(() => expect(notificationsAPI.classifyLegacy).toHaveBeenCalledWith(
+    await waitFor(() => expect(notificationsAPI.classify).toHaveBeenCalledWith(
       notification.id,
       { audienceType: 'GLOBAL' },
     ));
   });
 
   it('requires an Offering selection and never submits a client-supplied Program id for it', async () => {
-    render(<LegacyNotificationsPage />);
+    render(<NotificationReviewPage />);
     const audience = await screen.findByRole('combobox', { name: /Audience classification for Welcome update/i });
     fireEvent.change(audience, { target: { value: 'OFFERING' } });
 
@@ -82,7 +82,7 @@ describe('LegacyNotificationsPage', () => {
     fireEvent.change(offeringSelect, { target: { value: offering.id } });
     fireEvent.click(screen.getByRole('button', { name: /Save classification/i }));
 
-    await waitFor(() => expect(notificationsAPI.classifyLegacy).toHaveBeenCalledWith(
+    await waitFor(() => expect(notificationsAPI.classify).toHaveBeenCalledWith(
       notification.id,
       { audienceType: 'OFFERING', programOfferingId: offering.id },
     ));
