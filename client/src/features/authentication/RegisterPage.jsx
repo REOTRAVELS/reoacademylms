@@ -122,7 +122,7 @@ export default function RegisterPage() {
               required
               disabled={offeringsLoading || offerings.length === 0}
             />
-            {!offeringsLoading && offerings.length === 0 && (
+            {!offeringsLoading && !error && offerings.length === 0 && (
               <p className="notice notice-warning">There are no open Program offerings right now. Please check back later.</p>
             )}
             <Input
