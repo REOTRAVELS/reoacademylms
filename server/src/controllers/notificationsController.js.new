@@ -1,0 +1,65 @@
+import prisma from '../config/database.js';
+import { ok } from '../utils/response.js';
+
+export const listNotifications = async (req, res) => {
+  const items = await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 50 });
+  return ok(res, items);
+};
+
+export const markRead = async (req, res) => {
+  await prisma.notification.updateMany({ where: { userId: req.user.id, id: req.params.id }, data: { read: true } });
+  return ok(res, null, 'Updated');
+};
+
+export const markAllRead = async (req, res) => {
+  await prisma.notification.updateMany({ where: { userId: req.user.id }, data: { read: true } });
+  return ok(res, null, 'Updated');
+};\n\n
+
+// Announcements
+export const listAnnouncements = async (req, res) => {
+  const where = {};
+  if (req.query.programmeId) where.programmeId = req.query.programmeId;
+  if (req.query.cohortId) where.cohortId = req.query.cohortId;
+  if (req.query.courseId) where.courseId = req.query.courseId;
+  const announcements = await prisma.announcement.findMany({ where, orderBy: { createdAt: 'desc' } });
+  return ok(res, announcements);
+};
+
+export const createAnnouncement = async (req, res) => {
+  const { title, body, programmeId, cohortId, courseId } = req.body || {};
+  const announcement = await prisma.announcement.create({
+    data: { title, body, authorId: req.user.id, programmeId, cohortId, courseId },
+  });
+  await audit({ actorId: req.user.id, action: 'CREATE_ANNOUNCEMENT', entity: 'Announcement', entityId: announcement.id, ipAddress: req.ip });
+  return ok(res, announcement, 'Created', 201);
+};
+
+// Attendance
+export const recordAttendance = async (req, res) => {
+  const { cohortId, studentIds, date, present } = req.body || {};
+  if (!cohortId || !studentIds || !date) return fail(res, 'Missing required fields', 400);
+  
+  const dateObj = new Date(date);
+  const today = new Date();
+  if (dateObj > today) return fail(res, 'Cannot record future attendance', 400);
+  
+  const promises = studentIds.map(studentId => 
+    prisma.attendance.create({
+      data: { studentId, cohortId, date: dateObj, present: present !== false }
+    })
+  );
+  const created = await Promise.all(promises);
+  
+  await audit({ actorId: req.user.id, action: 'RECORD_ATTENDANCE', entity: 'Attendance', entityId: created.length.toString(), ipAddress: req.ip });
+  return ok(res, { count: created.length }, 'Attendance recorded', 201);
+};
+
+export const listAttendance = async (req, res) => {
+  const { cohortId, studentId } = req.query;
+  const where = {};
+  if (cohortId) where.cohortId = cohortId;
+  if (studentId) where.studentId = studentId;
+  const attendance = await prisma.attendance.findMany({ where, orderBy: { date: 'desc' } });
+  return ok(res, attendance);
+}

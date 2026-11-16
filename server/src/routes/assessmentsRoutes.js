@@ -1,0 +1,26 @@
+import { Router } from 'express';
+import * as c from '../controllers/assessmentsController.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireRole } from '../middleware/role.js';
+import { requireActiveProgramEnrollment } from '../middleware/programEnrollment.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
+
+const r = Router();
+r.use(authenticate);
+r.use(requireActiveProgramEnrollment);
+r.get('/', asyncHandler(c.listAssessments));
+r.get('/attempts', asyncHandler(c.listAttempts));
+r.get('/:id', asyncHandler(c.getAssessment));
+r.post('/', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.createAssessment));
+r.put('/:id', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.updateAssessment));
+r.delete('/:id', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.deleteAssessment));
+r.post('/:id/questions', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.addQuestion));
+r.put('/questions/:id', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.updateQuestion));
+r.delete('/questions/:id', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.deleteQuestion));
+r.post('/:id/attempts', requireRole('STUDENT'), asyncHandler(c.startAttempt));
+r.post('/attempts/:attemptId/submit', requireRole('STUDENT'), asyncHandler(c.submitAttempt));
+r.post('/attempts/:attemptId/grade', requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.gradeAttempt));
+r.post('/attempts/:attemptId/release-results', requireRole('SUPER_ADMIN'), asyncHandler(c.releaseAttemptResults));
+r.get('/attempts/:id', asyncHandler(c.getAttempt));
+r.post('/answers', asyncHandler(c.saveAnswer));
+export default r;

@@ -1,0 +1,22 @@
+import { Router } from 'express';
+import * as c from '../controllers/notificationsController.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireRole } from '../middleware/role.js';
+import { requireActiveProgramEnrollment } from '../middleware/programEnrollment.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
+
+const r = Router();
+r.use(authenticate);
+r.get('/', requireActiveProgramEnrollment, asyncHandler(c.listNotifications));
+r.get('/unread-count', requireActiveProgramEnrollment, asyncHandler(c.unreadNotificationCount));
+r.put('/:id/read', requireActiveProgramEnrollment, asyncHandler(c.markRead));
+r.put('/read-all', requireActiveProgramEnrollment, asyncHandler(c.markAllRead));
+r.get('/admin/legacy/options', requireRole('SUPER_ADMIN'), asyncHandler(c.listNotificationClassificationOptions));
+r.get('/admin/legacy', requireRole('SUPER_ADMIN'), asyncHandler(c.listLegacyNotifications));
+r.post('/admin/:id/classification', requireRole('SUPER_ADMIN'), asyncHandler(c.classifyLegacyNotification));
+r.get('/announcements', authenticate, requireActiveProgramEnrollment, asyncHandler(c.listAnnouncements));
+r.post('/announcements', authenticate, requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.createAnnouncement));
+r.get('/attendance/cohorts', authenticate, requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.listAttendanceCohorts));
+r.post('/attendance', authenticate, requireRole('SUPER_ADMIN', 'TRAINER'), asyncHandler(c.recordAttendance));
+r.get('/attendance', authenticate, requireActiveProgramEnrollment, asyncHandler(c.listAttendance));
+export default r;

@@ -1,0 +1,6 @@
+ALTER TABLE "Assessment"
+ADD COLUMN "instructions" TEXT,
+ADD COLUMN "passMarkPercent" DOUBLE PRECISION NOT NULL DEFAULT 50;
+
+ALTER TABLE "Question"
+ADD COLUMN "explanation" TEXT;

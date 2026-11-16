@@ -1,0 +1,41 @@
+REO ACADEMY — VERCEL PRODUCTION ENVIRONMENT VARIABLES
+
+This file contains placeholders only. Do not replace them with real credentials
+here. Add each name and value directly in Vercel > Settings > Environment
+Variables, with Production selected. Mark secrets as sensitive.
+
+NODE_ENV=production
+CLIENT_URL=https://REPLACE_WITH_YOUR_VERCEL_PROJECT_DOMAIN
+VITE_API_BASE_URL=/api
+DATABASE_URL=REPLACE_WITH_NEON_POOLED_POSTGRESQL_CONNECTION_STRING
+JWT_SECRET=REPLACE_WITH_UNIQUE_RANDOM_SECRET
+REDIS_URL=REPLACE_WITH_UPSTASH_TLS_REDISS_CONNECTION_URL
+FILE_STORAGE_PROVIDER=s3
+
+BREVO_API_KEY=REPLACE_WITH_NEW_BREVO_API_KEY
+EMAIL_FROM=Reotravelsacademy <info.academy@reotravelsandtours.org>
+
+LIVEKIT_URL=wss://REPLACE_WITH_LIVEKIT_PROJECT_HOST
+LIVEKIT_API_KEY=REPLACE_WITH_LIVEKIT_API_KEY
+LIVEKIT_API_SECRET=REPLACE_WITH_LIVEKIT_API_SECRET
+
+LIVEKIT_RECORDING_S3_BUCKET=REPLACE_WITH_B2_BUCKET_NAME
+LIVEKIT_RECORDING_S3_REGION=us-east-005
+LIVEKIT_RECORDING_S3_ACCESS_KEY=REPLACE_WITH_BUCKET_RESTRICTED_B2_KEY_ID
+LIVEKIT_RECORDING_S3_SECRET=REPLACE_WITH_B2_APPLICATION_KEY_SECRET
+LIVEKIT_RECORDING_S3_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+LIVEKIT_RECORDING_S3_PLAYBACK_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+LIVEKIT_RECORDING_S3_FORCE_PATH_STYLE=false
+
+NOTES
+
+- Use Neon’s pooled connection URL for DATABASE_URL at runtime. Use its direct
+  URL only for one-off database migrations.
+- Use an Upstash TLS connection URL beginning with rediss:// for REDIS_URL.
+  Do not include a redis-cli command or use the Upstash REST URL/token.
+- Use the B2 bucket name, not its bucket ID, and a bucket-restricted key.
+- Vercel supplies VERCEL automatically; do not add it yourself.
+- SMTP_URL and SMTP_FROM are omitted because this setup uses Brevo’s HTTPS API.
+- The previous values were exposed. Revoke/rotate the Neon database password,
+  Upstash token, Brevo API key, LiveKit API credentials, and B2 application key
+  before using this deployment. Generate a new JWT secret as well.

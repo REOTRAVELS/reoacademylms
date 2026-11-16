@@ -1,0 +1,5 @@
+CREATE TYPE "AssessmentType" AS ENUM ('ASSESSMENT', 'EXAMINATION');
+
+ALTER TABLE "Assessment"
+ADD COLUMN "type" "AssessmentType" NOT NULL DEFAULT 'ASSESSMENT',
+ADD COLUMN "resultsReleased" BOOLEAN NOT NULL DEFAULT false;

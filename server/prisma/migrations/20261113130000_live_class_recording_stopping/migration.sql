@@ -1,0 +1,2 @@
+-- STOPPED and endedAt are already present in the prior recording migration.
+-- This migration records the recording-stop workflow release without schema changes.
