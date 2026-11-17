@@ -57,13 +57,13 @@ export default function TrainersPage() {
   };
 
   const deleteTrainer = async (trainer) => {
-    if (!window.confirm(`Permanently delete ${trainer.firstName} ${trainer.lastName}'s account? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove ${trainer.firstName} ${trainer.lastName}'s account? Their access and profile details will be removed; academy records will be retained.`)) return;
     setBusyId(trainer.id);
     setError('');
     setNotice('');
     try {
       await usersAPI.delete(trainer.id);
-      setNotice(`${trainer.firstName} ${trainer.lastName}'s account was deleted.`);
+      setNotice(`${trainer.firstName} ${trainer.lastName}'s account was removed; academy records were retained.`);
       await loadTrainers();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not delete this trainer.');

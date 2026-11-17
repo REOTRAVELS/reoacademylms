@@ -15,7 +15,7 @@ export const authenticate = async (req, res, next) => {
       where: { id: payload.sub },
       include: { role: true },
     });
-    if (!user) return res.status(401).json({ success: false, message: 'User not found' });
+    if (!user || user.deletedAt) return res.status(401).json({ success: false, message: 'User not found' });
     if (user.status !== 'ACTIVE') {
       return res.status(403).json({ success: false, message: 'Account not active' });
     }
@@ -39,7 +39,7 @@ export const authenticateApplicant = asyncHandler(async (req, res, next) => {
     where: { id: payload.sub },
     include: { role: true },
   });
-  if (!user || user.role.name !== 'STUDENT' || !['PENDING', 'ACTIVE', 'REJECTED'].includes(user.status)) {
+  if (!user || user.deletedAt || user.role.name !== 'STUDENT' || !['PENDING', 'ACTIVE', 'REJECTED'].includes(user.status)) {
     return res.status(403).json({ success: false, message: 'Application access is unavailable' });
   }
   req.user = user;
@@ -53,7 +53,7 @@ export const optionalAuth = async (req, res, next) => {
     if (!token) return next();
     const payload = verifyToken(token);
     const user = await prisma.user.findUnique({ where: { id: payload.sub }, include: { role: true } });
-    if (user && user.status === 'ACTIVE') req.user = user;
+    if (user && !user.deletedAt && user.status === 'ACTIVE') req.user = user;
   } catch (e) {}
   next();
 };

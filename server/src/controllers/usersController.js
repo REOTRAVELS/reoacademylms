@@ -22,7 +22,7 @@ export const listUsers = async (req, res) => {
   const search = req.query.search;
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(50, Number(req.query.pageSize) || 20);
-  const where = {};
+  const where = { deletedAt: null };
   if (role) where.role = { name: role };
   if (status) where.status = status;
   if (search) {
@@ -56,7 +56,7 @@ export const getUser = async (req, res) => {
     return fail(res, 'Forbidden', 403);
   }
   const user = await prisma.user.findUnique({ where: { id: req.params.id }, include: { role: true } });
-  if (!user) return fail(res, 'User not found', 404);
+  if (!user || user.deletedAt) return fail(res, 'User not found', 404);
   return ok(res, {
     id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email,
     phone: user.phone, role: user.role.name, status: user.status, bio: user.bio,
@@ -68,16 +68,14 @@ export const updateUser = async (req, res) => {
   const isAdmin = req.user.role.name === 'SUPER_ADMIN';
   if (req.params.id !== req.user.id && !isAdmin) return fail(res, 'Forbidden', 403);
   const { firstName, lastName, phone, bio, status } = req.body || {};
+  const target = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { deletedAt: true, role: { select: { name: true } } },
+  });
+  if (!target || target.deletedAt) return fail(res, 'User not found', 404);
   if (status !== undefined && !isAdmin) return fail(res, 'Only an administrator can change account status', 403);
-  if (status !== undefined && isAdmin) {
-    const target = await prisma.user.findUnique({
-      where: { id: req.params.id },
-      select: { role: { select: { name: true } } },
-    });
-    if (!target) return fail(res, 'User not found', 404);
-    if (target.role.name === 'STUDENT') {
-      return fail(res, 'Student status must be managed through Program admissions or access controls', 409);
-    }
+  if (status !== undefined && target.role.name === 'STUDENT') {
+    return fail(res, 'Student status must be managed through Program admissions or access controls', 409);
   }
   const data = {};
   if (firstName) data.firstName = firstName;
@@ -371,21 +369,63 @@ export const deleteUser = async (req, res) => {
     where: { id: req.params.id },
     include: { role: true },
   });
-  if (!target) return fail(res, 'User not found', 404);
+  if (!target || target.deletedAt) return fail(res, 'User not found', 404);
   if (target.role.name === 'SUPER_ADMIN') {
     return fail(res, 'Administrator accounts cannot be deleted here', 403);
   }
-  if (target.role.name === 'STUDENT') {
-    const [applications, programEnrollments] = await Promise.all([
-      prisma.programApplication.count({ where: { studentId: target.id } }),
-      prisma.programEnrollment.count({ where: { studentId: target.id } }),
-    ]);
-    if (applications || programEnrollments) {
-      return fail(res, 'Students with Program application or enrollment history cannot be deleted', 409);
+
+  const deletedAt = new Date();
+  const passwordHash = await hashPassword(randomUUID());
+  await prisma.$transaction(async (tx) => {
+    if (target.role.name === 'STUDENT') {
+      const pendingApplications = await tx.programApplication.findMany({
+        where: { studentId: target.id, status: 'PENDING' },
+        select: { id: true },
+      });
+      if (pendingApplications.length) {
+        const updateResult = await tx.programApplication.updateMany({
+          where: { studentId: target.id, status: 'PENDING' },
+          data: {
+            status: 'REJECTED',
+            rejectionReason: 'Applicant account removed by an administrator',
+            reviewedAt: deletedAt,
+            reviewedById: req.user.id,
+          },
+        });
+        if (updateResult.count !== pendingApplications.length) {
+          const error = new Error('A Program application changed during account removal. Please retry.');
+          error.status = 409;
+          throw error;
+        }
+        await tx.programApplicationStatusHistory.createMany({
+          data: pendingApplications.map(({ id }) => ({
+            applicationId: id,
+            fromStatus: 'PENDING',
+            toStatus: 'REJECTED',
+            reason: 'Applicant account removed by an administrator',
+            changedById: req.user.id,
+          })),
+        });
+      }
     }
-  }
-  await prisma.user.delete({ where: { id: req.params.id } });
+    await tx.user.update({
+      where: { id: target.id },
+      data: {
+        firstName: 'Deleted',
+        lastName: 'User',
+        email: `deleted-${target.id}@deleted.invalid`,
+        phone: null,
+        bio: null,
+        avatarUrl: null,
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+        status: 'SUSPENDED',
+        deletedAt,
+      },
+    });
+  }, { isolationLevel: 'Serializable' });
   await audit({ actorId: req.user.id, action: 'DELETE_USER', entity: 'User', entityId: req.params.id, ipAddress: req.ip });
   await revalidateLiveClassAccess();
-  return ok(res, null, 'Deleted');
+  return ok(res, null, 'Account removed. Academic history was retained.');
 };

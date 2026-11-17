@@ -11,10 +11,10 @@ export const adminDashboard = async (req, res) => {
     activeProgrammes, activeIntakes, totalEnrolments, totalCourses, publishedCourses,
     draftCourses, publishedAssessments, publishedExaminations, examinationAttempts, upcomingLiveClasses,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: { name: 'STUDENT' } } }),
-    prisma.user.count({ where: { role: { name: 'STUDENT' }, status: 'ACTIVE' } }),
-    prisma.user.count({ where: { role: { name: 'STUDENT' }, status: 'PENDING' } }),
-    prisma.user.count({ where: { role: { name: 'TRAINER' }, status: 'ACTIVE' } }),
+    prisma.user.count({ where: { role: { name: 'STUDENT' }, deletedAt: null } }),
+    prisma.user.count({ where: { role: { name: 'STUDENT' }, status: 'ACTIVE', deletedAt: null } }),
+    prisma.user.count({ where: { role: { name: 'STUDENT' }, status: 'PENDING', deletedAt: null } }),
+    prisma.user.count({ where: { role: { name: 'TRAINER' }, status: 'ACTIVE', deletedAt: null } }),
     prisma.programme.count({ where: { status: 'ACTIVE' } }),
     prisma.intake.count({ where: { status: 'ACTIVE' } }),
     prisma.enrolment.count(),
@@ -29,7 +29,7 @@ export const adminDashboard = async (req, res) => {
 
   const [recentRegistrations, recentExaminationAttempts] = await Promise.all([
     prisma.user.findMany({
-      where: { role: { name: 'STUDENT' } },
+      where: { role: { name: 'STUDENT' }, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 5,
       select: { id: true, firstName: true, lastName: true, email: true, status: true, createdAt: true },

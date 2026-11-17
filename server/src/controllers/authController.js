@@ -289,7 +289,7 @@ export const approveUser = async (req, res) => {
   const { userId, action } = req.validated.body;
   if (userId === req.user.id) return fail(res, 'You cannot change your own account status', 400);
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
-  if (!user) return fail(res, 'User not found', 404);
+  if (!user || user.deletedAt) return fail(res, 'User not found', 404);
   if (user.role.name === 'SUPER_ADMIN') return fail(res, 'Administrator account status cannot be changed here', 403);
   if (user.role.name === 'STUDENT' && ['approve', 'reject'].includes(action)) {
     return fail(res, 'Student admission decisions must be made from the Program application review page', 409);

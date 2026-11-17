@@ -165,6 +165,7 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   lastLoginAt  DateTime?
+  deletedAt    DateTime?
 
   resetToken          String?
   resetTokenExpiresAt DateTime?

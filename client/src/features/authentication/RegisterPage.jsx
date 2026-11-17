@@ -6,6 +6,14 @@ import { Button } from '../../components/common/Button';
 import { Input, Select } from '../../components/forms/Input';
 import { applicationsAPI } from '../../services/api';
 
+const registrationErrorMessage = (error) => {
+  const message = error.response?.data?.message;
+  const requestId = error.response?.data?.requestId || error.response?.headers?.['x-request-id'];
+  if (message) return requestId ? `${message} (Reference: ${requestId})` : message;
+  if (error.response) return `Registration failed with HTTP ${error.response.status}. Please try again.`;
+  return 'Could not reach the server. Check your connection and try again.';
+};
+
 export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [offeringsLoading, setOfferingsLoading] = useState(true);
@@ -49,7 +57,7 @@ export default function RegisterPage() {
       await register(data);
       navigate('/pending');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(registrationErrorMessage(err));
     } finally {
       setLoading(false);
     }

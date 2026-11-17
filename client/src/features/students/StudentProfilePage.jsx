@@ -46,7 +46,7 @@ export default function StudentProfilePage() {
   };
 
   const deleteAccount = async () => {
-    if (!window.confirm(`Permanently delete ${user.firstName} ${user.lastName}'s account? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove ${user.firstName} ${user.lastName}'s account? Their access and profile details will be removed; academic history will be retained.`)) return;
     setSaving(true);
     setError('');
     try {

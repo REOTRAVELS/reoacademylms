@@ -43,8 +43,13 @@ const assertActiveEnrollmentScope = (where) => {
 
 test('admin dashboard selects only public actor names for recent audit events', async () => {
   let auditQuery;
+  let recentUserQuery;
+  const userCountQueries = [];
   const restores = [
-    stubMethod(prisma.user, 'count', async () => 0),
+    stubMethod(prisma.user, 'count', async (query) => {
+      userCountQueries.push(query);
+      return 0;
+    }),
     stubMethod(prisma.programme, 'count', async () => 0),
     stubMethod(prisma.intake, 'count', async () => 0),
     stubMethod(prisma.enrolment, 'count', async () => 0),
@@ -53,7 +58,10 @@ test('admin dashboard selects only public actor names for recent audit events', 
     stubMethod(prisma.assessmentAttempt, 'findMany', async () => []),
     stubMethod(prisma.course, 'count', async () => 0),
     stubMethod(prisma.liveClass, 'count', async () => 0),
-    stubMethod(prisma.user, 'findMany', async () => []),
+    stubMethod(prisma.user, 'findMany', async (query) => {
+      recentUserQuery = query;
+      return [];
+    }),
     stubMethod(prisma.auditLog, 'findMany', async (query) => {
       auditQuery = query;
       return [{
@@ -69,6 +77,9 @@ test('admin dashboard selects only public actor names for recent audit events', 
   try {
     await adminDashboard({}, response);
     assert.equal(response.statusCode, 200);
+    assert.equal(userCountQueries.length, 4);
+    userCountQueries.forEach(({ where }) => assert.equal(where.deletedAt, null));
+    assert.equal(recentUserQuery.where.deletedAt, null);
     assert.deepEqual(auditQuery.select, {
       id: true,
       action: true,

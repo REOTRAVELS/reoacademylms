@@ -54,13 +54,13 @@ export default function StudentsPage() {
   };
 
   const deleteStudent = async (student) => {
-    if (!window.confirm(`Permanently delete ${student.firstName} ${student.lastName}'s account? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove ${student.firstName} ${student.lastName}'s account? Their access and profile details will be removed; academic history will be retained.`)) return;
     setBusyId(student.id);
     setError('');
     setNotice('');
     try {
       await usersAPI.delete(student.id);
-      setNotice(`${student.firstName} ${student.lastName}'s account was deleted.`);
+      setNotice(`${student.firstName} ${student.lastName}'s account was removed; academic history was retained.`);
       await loadStudents();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not delete this account.');

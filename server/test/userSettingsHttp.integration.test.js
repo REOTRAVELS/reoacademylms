@@ -208,3 +208,134 @@ test('S3-backed profile pictures upload through the LMS API', async () => {
     restores.reverse().forEach((restore) => restore());
   }
 });
+
+test('Super Admins can remove students and trainers while preserving their records', async () => {
+  const admin = { id: 'admin-1', status: 'ACTIVE', role: { name: 'SUPER_ADMIN' } };
+  const targets = [
+    {
+      id: 'student-with-history',
+      email: 'student@example.test',
+      status: 'ACTIVE',
+      role: { name: 'STUDENT' },
+      deletedAt: null,
+    },
+    {
+      id: 'trainer-with-assignments',
+      email: 'trainer@example.test',
+      status: 'ACTIVE',
+      role: { name: 'TRAINER' },
+      deletedAt: null,
+    },
+  ];
+  const restores = [];
+  const userUpdates = [];
+  let applicationUpdate;
+  let historyRows;
+  let server;
+
+  restores.push(stubMethod(prisma.user, 'findUnique', async ({ where }) => (
+    where.id === admin.id ? admin : targets.find(({ id }) => id === where.id) || null
+  )));
+  restores.push(stubMethod(prisma, '$transaction', async (operation) => operation({
+    programApplication: {
+      findMany: async ({ where }) => (
+        where.studentId === targets[0].id ? [{ id: 'pending-application' }] : []
+      ),
+      updateMany: async (args) => {
+        applicationUpdate = args;
+        return { count: 1 };
+      },
+    },
+    programApplicationStatusHistory: {
+      createMany: async ({ data }) => { historyRows = data; },
+    },
+    user: {
+      update: async (args) => {
+        userUpdates.push(args);
+        return args.data;
+      },
+    },
+  })));
+  restores.push(stubMethod(prisma.auditLog, 'create', async () => ({})));
+
+  try {
+    server = await startServer();
+    for (const target of targets) {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/users/${target.id}`, {
+        method: 'DELETE',
+        headers: { Cookie: `reoa_session=${signToken({ sub: admin.id })}` },
+      });
+      assert.equal(response.status, 200);
+      assert.match((await response.json()).message, /academic history was retained/i);
+    }
+
+    assert.equal(userUpdates.length, 2);
+    assert.deepEqual(userUpdates.map(({ where }) => where.id), targets.map(({ id }) => id));
+    for (const { data } of userUpdates) {
+      assert.equal(data.firstName, 'Deleted');
+      assert.equal(data.lastName, 'User');
+      assert.match(data.email, /^deleted-.+@deleted\.invalid$/);
+      assert.equal(data.phone, null);
+      assert.equal(data.bio, null);
+      assert.equal(data.avatarUrl, null);
+      assert.equal(data.status, 'SUSPENDED');
+      assert.ok(data.deletedAt instanceof Date);
+    }
+    assert.deepEqual(applicationUpdate.where, { studentId: targets[0].id, status: 'PENDING' });
+    assert.equal(applicationUpdate.data.status, 'REJECTED');
+    assert.deepEqual(historyRows.map(({ applicationId, toStatus }) => ({ applicationId, toStatus })), [
+      { applicationId: 'pending-application', toStatus: 'REJECTED' },
+    ]);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('removed accounts are excluded from user listings', async () => {
+  const admin = { id: 'admin-1', status: 'ACTIVE', role: { name: 'SUPER_ADMIN' } };
+  const restores = [];
+  let userQuery;
+  let server;
+  restores.push(stubMethod(prisma.user, 'findUnique', async () => admin));
+  restores.push(stubMethod(prisma.user, 'count', async ({ where }) => {
+    userQuery = where;
+    return 0;
+  }));
+  restores.push(stubMethod(prisma.user, 'findMany', async ({ where }) => {
+    userQuery = where;
+    return [];
+  }));
+  try {
+    server = await startServer();
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/users`, {
+      headers: { Cookie: `reoa_session=${signToken({ sub: admin.id })}` },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(userQuery.deletedAt, null);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('removed accounts cannot reuse existing sessions', async () => {
+  const deletedUser = {
+    id: 'deleted-student',
+    status: 'SUSPENDED',
+    deletedAt: new Date(),
+    role: { name: 'STUDENT' },
+  };
+  const restore = stubMethod(prisma.user, 'findUnique', async () => deletedUser);
+  let server;
+  try {
+    server = await startServer();
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/users/${deletedUser.id}`, {
+      headers: { Cookie: `reoa_session=${signToken({ sub: deletedUser.id })}` },
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restore();
+  }
+});
