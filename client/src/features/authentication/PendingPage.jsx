@@ -84,6 +84,7 @@ export default function PendingPage() {
     <div className="auth-page">
       <aside className="auth-aside">
         <div>
+          <img className="auth-logo" src="/reo.png" alt="" />
           <h1>REO Travel Academy</h1>
           <p>Application decisions and Program enrollment are managed separately from academic access.</p>
         </div>

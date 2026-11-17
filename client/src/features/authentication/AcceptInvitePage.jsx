@@ -44,6 +44,7 @@ export default function AcceptInvitePage() {
     <div className="auth-page">
       <aside className="auth-aside">
         <div>
+          <img className="auth-logo" src="/reo.png" alt="" />
           <h1>REO Travel Academy</h1>
           <p>You have been invited to join the academy. Set your password to activate your account.</p>
         </div>

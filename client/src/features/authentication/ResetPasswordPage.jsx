@@ -30,6 +30,7 @@ export default function ResetPasswordPage() {
     <div className="auth-page">
       <aside className="auth-aside">
         <div>
+          <img className="auth-logo" src="/reo.png" alt="" />
           <h1>REO Travel Academy</h1>
           <p>Choose a new password to continue your learning journey.</p>
         </div>

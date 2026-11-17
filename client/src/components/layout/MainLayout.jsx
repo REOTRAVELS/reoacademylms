@@ -122,7 +122,7 @@ export default function MainLayout() {
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} aria-label="Main navigation">
         <NavLink to="/dashboard" className="brand-lockup" onClick={() => setSidebarOpen(false)}>
-          <span className="brand-mark">R</span>
+          <img className="brand-logo" src="/reo.png" alt="" />
           <span>
             <strong>REO ACADEMY</strong>
             <small>Travel &amp; learning</small>

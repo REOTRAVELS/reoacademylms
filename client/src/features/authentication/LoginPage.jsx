@@ -38,6 +38,7 @@ export default function LoginPage() {
     <div className="auth-page">
       <aside className="auth-aside">
         <div>
+          <img className="auth-logo" src="/reo.png" alt="" />
           <h1>REO Travel Academy</h1>
           <p>The premier learning management system for travel and tourism professionals. Sign in to access your courses, assessments, and academic records.</p>
         </div>

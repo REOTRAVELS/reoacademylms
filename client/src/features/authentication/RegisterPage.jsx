@@ -59,6 +59,7 @@ export default function RegisterPage() {
     <div className="auth-page">
       <aside className="auth-aside">
         <div>
+          <img className="auth-logo" src="/reo.png" alt="" />
           <h1>REO Travel Academy</h1>
           <p>Join a community of travel professionals advancing their careers through accredited, institution-backed learning programmes.</p>
         </div>
