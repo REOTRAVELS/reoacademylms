@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 
 process.env.JWT_SECRET ||= 'object-storage-test-secret';
-const [{ createObjectStorageService }, {
+const [{ createObjectStorageService, createS3Client }, {
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -11,6 +11,12 @@ const [{ createObjectStorageService }, {
   import('../src/services/objectStorage.js'),
   import('@aws-sdk/client-s3'),
 ]);
+
+test('S3 client does not add optional checksums to presigned uploads', async () => {
+  const client = createS3Client();
+  assert.equal(await client.config.requestChecksumCalculation(), 'WHEN_REQUIRED');
+  client.destroy();
+});
 
 test('object storage signs uploads with owner, content type, and expected size', async () => {
   let command;

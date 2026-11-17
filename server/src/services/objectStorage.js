@@ -12,6 +12,7 @@ export const createS3Client = (endpoint) => new S3Client({
   region: env.livekitRecordingS3Region,
   endpoint: endpoint || undefined,
   forcePathStyle: env.livekitRecordingS3ForcePathStyle,
+  requestChecksumCalculation: 'WHEN_REQUIRED',
   credentials: {
     accessKeyId: env.livekitRecordingS3AccessKey,
     secretAccessKey: env.livekitRecordingS3Secret,
