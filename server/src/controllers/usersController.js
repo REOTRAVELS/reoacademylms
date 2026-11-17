@@ -129,6 +129,67 @@ export const uploadAvatar = async (req, res) => {
   return ok(res, { avatarUrl: avatarUrlFor(updated) }, 'Profile picture updated');
 };
 
+export const uploadAvatarToObjectStorage = async (req, res) => {
+  const file = req.file;
+  if (
+    !file
+    || !Buffer.isBuffer(file.buffer)
+    || !hasAllowedUploadType(avatarTypes, file.originalname, file.mimetype)
+    || !avatarFileMatchesType(file.buffer, file.mimetype)
+  ) return fail(res, 'The uploaded file is not a valid PNG, JPEG, or WebP image', 400);
+  if (!file.buffer.length || file.buffer.length > 5 * 1024 * 1024) {
+    return fail(res, 'Profile pictures must be no larger than 5 MB', 413);
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, avatarUrl: true },
+  });
+  if (!target) return fail(res, 'User not found', 404);
+
+  const extension = path.extname(file.originalname).toLowerCase();
+  const storageKey = `avatars/${target.id}/${randomUUID()}${extension}`;
+  const storage = getObjectStorage();
+  await storage.putObject({
+    key: storageKey,
+    body: file.buffer,
+    contentType: file.mimetype,
+    contentLength: file.buffer.length,
+    metadata: {
+      'owner-id': req.user.id,
+      'expected-size': String(file.buffer.length),
+    },
+  });
+
+  let updated;
+  try {
+    updated = await prisma.user.update({
+      where: { id: target.id },
+      data: { avatarUrl: storageKey },
+      include: { role: true },
+    });
+  } catch (error) {
+    try {
+      await storage.deleteObject(storageKey);
+    } catch (cleanupError) {
+      console.error('Could not remove unreferenced profile image', cleanupError);
+    }
+    throw error;
+  }
+
+  if (target.avatarUrl?.startsWith('avatars/')) {
+    await storage.deleteObject(target.avatarUrl);
+  }
+  await audit({
+    actorId: req.user.id,
+    action: 'UPDATE_PROFILE_PICTURE',
+    entity: 'User',
+    entityId: updated.id,
+    ipAddress: req.ip,
+  });
+  return ok(res, { avatarUrl: avatarUrlFor(updated) }, 'Profile picture updated');
+};
+
 const avatarUploadDetails = (body = {}) => {
   const originalName = path.posix.basename(String(body.originalName || '').replace(/\\/g, '/')).trim();
   const mimeType = body.mimeType;

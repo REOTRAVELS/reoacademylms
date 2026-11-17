@@ -82,12 +82,13 @@ export const createObjectStorageService = ({
     );
   },
 
-  putObject: async ({ key, body, contentType, contentLength = body.length }) => uploadClient.send(new PutObjectCommand({
+  putObject: async ({ key, body, contentType, contentLength = body.length, metadata }) => uploadClient.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
     Body: body,
     ContentLength: contentLength,
     ContentType: contentType,
+    Metadata: metadata,
   })),
 
   deleteObject: async (key) => uploadClient.send(new DeleteObjectCommand({

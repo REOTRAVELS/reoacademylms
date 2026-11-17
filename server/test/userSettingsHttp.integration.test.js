@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import http from 'node:http';
 import os from 'os';
 import path from 'path';
 
@@ -128,5 +129,82 @@ test('profile settings keep role read-only, allow own picture updates, and chang
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
     fs.rmSync(env.uploadDir, { recursive: true, force: true });
+  }
+});
+
+test('S3-backed profile pictures upload through the LMS API', async () => {
+  const restores = [];
+  const storageConfig = {
+    fileStorageProvider: env.fileStorageProvider,
+    livekitRecordingS3Endpoint: env.livekitRecordingS3Endpoint,
+    livekitRecordingS3Bucket: env.livekitRecordingS3Bucket,
+    livekitRecordingS3Region: env.livekitRecordingS3Region,
+    livekitRecordingS3AccessKey: env.livekitRecordingS3AccessKey,
+    livekitRecordingS3Secret: env.livekitRecordingS3Secret,
+    livekitRecordingS3ForcePathStyle: env.livekitRecordingS3ForcePathStyle,
+  };
+  const previousAvatarUrl = user.avatarUrl;
+  let storageServer;
+  let apiServer;
+  let receivedUpload;
+
+  storageServer = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      receivedUpload = {
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        body: Buffer.concat(chunks),
+      };
+      res.writeHead(200, { ETag: '"test-upload"' });
+      res.end();
+    });
+  });
+
+  try {
+    await new Promise((resolve) => storageServer.listen(0, '127.0.0.1', resolve));
+    Object.assign(env, {
+      fileStorageProvider: 's3',
+      livekitRecordingS3Endpoint: `http://127.0.0.1:${storageServer.address().port}`,
+      livekitRecordingS3Bucket: 'test-bucket',
+      livekitRecordingS3Region: 'us-east-1',
+      livekitRecordingS3AccessKey: 'test-access-key',
+      livekitRecordingS3Secret: 'test-secret-key',
+      livekitRecordingS3ForcePathStyle: true,
+    });
+    user.avatarUrl = null;
+    restores.push(stubMethod(prisma.user, 'findUnique', async () => ({ ...user })));
+    restores.push(stubMethod(prisma.user, 'update', async ({ data }) => {
+      Object.assign(user, data);
+      return user;
+    }));
+    restores.push(stubMethod(prisma.auditLog, 'create', async () => ({})));
+
+    apiServer = await startServer();
+    const imageBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const avatarForm = new FormData();
+    avatarForm.append('file', new Blob([imageBytes], { type: 'image/png' }), 'profile.png');
+    const response = await fetch(`http://127.0.0.1:${apiServer.address().port}/api/users/${user.id}/avatar`, {
+      method: 'POST',
+      headers: { Cookie: `reoa_session=${signToken({ sub: user.id })}` },
+      body: avatarForm,
+    });
+
+    assert.equal(response.status, 200);
+    assert.match(user.avatarUrl, /^avatars\/user-1\/[0-9a-f-]{36}\.png$/);
+    assert.equal(receivedUpload.method, 'PUT');
+    const uploadedPath = new URL(receivedUpload.url, 'http://localhost').pathname;
+    assert.match(uploadedPath, /\/test-bucket\/avatars\/user-1\/[0-9a-f-]{36}\.png$/);
+    assert.equal(receivedUpload.headers['x-amz-meta-owner-id'], user.id);
+    assert.equal(receivedUpload.headers['x-amz-meta-expected-size'], String(imageBytes.length));
+    assert.deepEqual(receivedUpload.body, imageBytes);
+  } finally {
+    Object.assign(env, storageConfig);
+    user.avatarUrl = previousAvatarUrl;
+    if (apiServer?.listening) await closeServer(apiServer);
+    if (storageServer?.listening) await closeServer(storageServer);
+    restores.reverse().forEach((restore) => restore());
   }
 });

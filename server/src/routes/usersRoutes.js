@@ -3,8 +3,9 @@ import * as c from '../controllers/usersController.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { uploadAvatarFile } from '../middleware/upload.js';
+import { uploadAvatarFile, uploadAvatarMemoryFile } from '../middleware/upload.js';
 import { env } from '../config/env.js';
+import { isObjectStorageEnabled } from '../services/objectStorage.js';
 
 const r = Router();
 r.use(authenticate);
@@ -22,11 +23,16 @@ r.post('/:id/avatar', manageOwnAvatar, (req, res, next) => {
   if (req.is('application/json')) {
     return asyncHandler(c.finalizeAvatarUpload)(req, res, next);
   }
+  if (isObjectStorageEnabled()) return uploadAvatarMemoryFile(req, res, next);
   if (env.nodeEnv === 'production') {
     return res.status(503).json({ success: false, message: 'Use the secure object storage upload flow' });
   }
   return uploadAvatarFile(req, res, next);
-}, asyncHandler(c.uploadAvatar));
+}, asyncHandler((req, res, next) => (
+  req.file?.buffer
+    ? c.uploadAvatarToObjectStorage(req, res, next)
+    : c.uploadAvatar(req, res, next)
+)));
 r.post('/:id/password', asyncHandler(c.changePassword));
 r.get('/:id', asyncHandler(c.getUser));
 r.put('/:id', asyncHandler(c.updateUser));

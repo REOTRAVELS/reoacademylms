@@ -25,8 +25,8 @@ const createUploadMiddleware = (instance) => (req, res, next) => {
   });
 };
 
-const createUploader = (allowedTypes, maxFileSize) => multer({
-  storage,
+const createUploader = (allowedTypes, maxFileSize, uploadStorage = storage) => multer({
+  storage: uploadStorage,
   limits: { fileSize: maxFileSize },
   fileFilter: (req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
@@ -41,4 +41,8 @@ export const uploadResourceFile = createUploadMiddleware(
 
 export const uploadAvatarFile = createUploadMiddleware(
   createUploader(avatarTypes, 5 * 1024 * 1024),
+);
+
+export const uploadAvatarMemoryFile = createUploadMiddleware(
+  createUploader(avatarTypes, 5 * 1024 * 1024, multer.memoryStorage()),
 );

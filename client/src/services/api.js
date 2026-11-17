@@ -334,13 +334,7 @@ export const usersAPI = {
   uploadAvatar: async (id, file) => {
     const localForm = new FormData();
     localForm.append('file', file);
-    return uploadWithStorageIntent({
-      intentPath: `/users/${id}/avatar/upload-intent`,
-      finalizePath: `/users/${id}/avatar`,
-      file,
-      localForm,
-      metadata: {},
-    });
+    return api.post(`/users/${id}/avatar`, localForm);
   },
   changePassword: async (id, form) => api.post(`/users/${id}/password`, form),
   avatarImageUrl: (avatarUrl) => avatarUrl
