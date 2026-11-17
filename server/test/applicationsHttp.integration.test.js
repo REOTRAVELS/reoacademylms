@@ -8,10 +8,11 @@ process.env.EMAIL_FROM = '';
 process.env.SMTP_URL = '';
 process.env.SMTP_FROM = '';
 
-const [{ default: app }, { default: prisma }, { signToken }] = await Promise.all([
+const [{ default: app }, { default: prisma }, { signToken }, { isOfferingOpenForApplications }] = await Promise.all([
   import('../src/app.js'),
   import('../src/config/database.js'),
   import('../src/utils/jwt.js'),
+  import('../src/services/admissions.js'),
 ]);
 
 const admin = { id: 'admin-1', status: 'ACTIVE', role: { name: 'SUPER_ADMIN' } };
@@ -66,6 +67,28 @@ const openOffering = () => {
     programme: { id: 'programme-1', status: 'ACTIVE' },
   };
 };
+
+test('manually opened future intakes accept applications before the admission start date', () => {
+  const offering = {
+    status: 'ACTIVE',
+    programme: { status: 'ACTIVE' },
+    intake: {
+      status: 'UPCOMING',
+      admissionsOpen: true,
+      admissionStartDate: new Date('2027-01-01T00:00:00.000Z'),
+      admissionEndDate: new Date('2027-01-14T00:00:00.000Z'),
+      academicStartDate: new Date('2027-01-15T09:30:00.000Z'),
+      timezone: 'UTC',
+    },
+  };
+
+  assert.equal(isOfferingOpenForApplications(offering, new Date('2026-11-17T12:00:00.000Z')), true);
+  assert.equal(isOfferingOpenForApplications(offering, new Date('2027-01-15T12:00:00.000Z')), false);
+  assert.equal(isOfferingOpenForApplications({
+    ...offering,
+    intake: { ...offering.intake, admissionsOpen: false },
+  }, new Date('2026-11-17T12:00:00.000Z')), false);
+});
 
 test('registration creates a pending account and its single Program application in one transaction', async () => {
   let transactionCount = 0;

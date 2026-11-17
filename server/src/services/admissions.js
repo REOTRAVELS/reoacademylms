@@ -32,8 +32,7 @@ export const isOfferingOpenForApplications = (offering, now = new Date()) => {
     || offering.programme?.status !== 'ACTIVE'
   ) return false;
   const today = dateInTimezone(now, offering.intake.timezone);
-  return today >= dateOnly(offering.intake.admissionStartDate)
-    && today <= dateOnly(offering.intake.admissionEndDate);
+  return today <= dateOnly(offering.intake.admissionEndDate);
 };
 
 export const listOpenOfferings = async (now = new Date()) => {

@@ -177,6 +177,9 @@ export default function IntakeDetailPage() {
             options={intakeStatuses}
           />
         </div>
+        <p className="intake-admissions-note">
+          Opening admissions makes this intake available before its admission start date. The admission end date remains the deadline.
+        </p>
       </section>
 
       <section className="card">
