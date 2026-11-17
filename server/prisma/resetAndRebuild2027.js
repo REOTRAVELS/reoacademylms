@@ -443,10 +443,10 @@ const programs = [
 ];
 
 const intakeCalendar = [
-  { gateNumber: 1, season: 'WINTER', admissionStart: '2027-01-01', admissionEnd: '2027-01-14', academicStart: '2027-01-15T09:00:00.000Z', academicEnd: '2027-03-31' },
-  { gateNumber: 2, season: 'SPRING', admissionStart: '2027-04-01', admissionEnd: '2027-04-14', academicStart: '2027-04-15T09:00:00.000Z', academicEnd: '2027-06-30' },
-  { gateNumber: 3, season: 'SUMMER', admissionStart: '2027-07-01', admissionEnd: '2027-07-14', academicStart: '2027-07-15T09:00:00.000Z', academicEnd: '2027-09-30' },
-  { gateNumber: 4, season: 'FALL', admissionStart: '2027-10-01', admissionEnd: '2027-10-14', academicStart: '2027-10-15T09:00:00.000Z', academicEnd: '2027-12-31' },
+  { gateNumber: 1, season: 'WINTER', academicStart: '2027-01-15T09:00:00.000Z', academicEnd: '2027-03-31' },
+  { gateNumber: 2, season: 'SPRING', academicStart: '2027-04-15T09:00:00.000Z', academicEnd: '2027-06-30' },
+  { gateNumber: 3, season: 'SUMMER', academicStart: '2027-07-15T09:00:00.000Z', academicEnd: '2027-09-30' },
+  { gateNumber: 4, season: 'FALL', academicStart: '2027-10-15T09:00:00.000Z', academicEnd: '2027-12-31' },
 ];
 
 const toUtcDate = (date) => new Date(`${date}T00:00:00.000Z`);
@@ -679,8 +679,6 @@ const createAcademicStructure = async (database, superAdminIds) => {
         gateNumber: entry.gateNumber,
         season: entry.season,
         year: 2027,
-        admissionStartDate: toUtcDate(entry.admissionStart),
-        admissionEndDate: toUtcDate(entry.admissionEnd),
         academicStartDate: new Date(entry.academicStart),
         academicEndDate: toUtcDate(entry.academicEnd),
         timezone: 'UTC',

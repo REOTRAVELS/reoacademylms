@@ -17,16 +17,13 @@ const intakeStatuses = [
 ];
 const seasonsByGate = { 1: 'WINTER', 2: 'SPRING', 3: 'SUMMER', 4: 'FALL' };
 const gatesBySeason = Object.fromEntries(Object.entries(seasonsByGate).map(([gate, season]) => [season, gate]));
-const asDateInput = (value) => String(value).slice(0, 10);
 const toEditForm = (intake) => ({
   gateNumber: intake.gateNumber,
   season: intake.season,
   year: intake.year,
   timezone: intake.timezone,
-  admissionStartDate: asDateInput(intake.admissionStartDate),
-  admissionEndDate: asDateInput(intake.admissionEndDate),
   academicStartDate: toDateTimeLocal(intake.academicStartDate, intake.timezone),
-  academicEndDate: asDateInput(intake.academicEndDate),
+  academicEndDate: String(intake.academicEndDate).slice(0, 10),
 });
 
 export default function IntakeDetailPage() {
@@ -36,7 +33,7 @@ export default function IntakeDetailPage() {
   const [editing, setEditing] = useState(false);
   const [programmes, setProgrammes] = useState([]);
   const [selectedProgrammeIds, setSelectedProgrammeIds] = useState([]);
-  const [offeringStatus, setOfferingStatus] = useState('INACTIVE');
+  const [offeringStatus, setOfferingStatus] = useState('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -91,7 +88,7 @@ export default function IntakeDetailPage() {
 
   const toggleAdmissions = () => runAction(
     () => intakesAPI.update(id, { admissionsOpen: !intake.admissionsOpen }),
-    `Admissions ${intake.admissionsOpen ? 'closed' : 'opened'}.`,
+    `Registration ${intake.admissionsOpen ? 'locked' : 'unlocked'}.`,
   );
 
   const addProgrammes = async (event) => {
@@ -137,7 +134,9 @@ export default function IntakeDetailPage() {
     );
   }
 
+  const intakeStarted = new Date(intake.academicStartDate).getTime() <= Date.now();
   const admissionsUnavailable = intake.status === 'ARCHIVED' || intake.status === 'COMPLETED';
+  const registrationOpen = intake.admissionsOpen && !intakeStarted && !admissionsUnavailable;
   return (
     <div className="page-stack">
       <Link className="back-link" to="/intakes"><ArrowLeft size={16} /> All intakes</Link>
@@ -153,22 +152,21 @@ export default function IntakeDetailPage() {
         {notice && <div className="notice notice-success">{notice}</div>}
         {error && <div className="notice notice-error" role="alert">{error}</div>}
         <div className="intake-date-grid">
-          <div><span>Admissions</span><strong>{formatIntakeDate(intake.admissionStartDate)} – {formatIntakeDate(intake.admissionEndDate)}</strong></div>
           <div><span>Academic period</span><strong>{formatIntakeStart(intake.academicStartDate, intake.timezone)} – {formatIntakeDate(intake.academicEndDate)}</strong></div>
           <div><span>Program offerings</span><strong>{intake.programOfferings.length}</strong></div>
-          <div><span>Admissions</span><strong>{intake.admissionsOpen ? 'Open' : 'Closed'}</strong></div>
+          <div><span>Registration</span><strong>{intakeStarted ? 'Locked · intake started' : registrationOpen ? 'Open' : 'Locked'}</strong></div>
           <div><span>Approved students</span><strong>{intake.studentCounts?.approved ?? 0}</strong></div>
           <div><span>Waiting to start</span><strong>{intake.studentCounts?.waiting ?? 0}</strong></div>
           <div><span>Access eligible</span><strong>{intake.studentCounts?.eligible ?? 0}</strong></div>
         </div>
         <div className="intake-action-row">
           <Button
-            variant={intake.admissionsOpen ? 'secondary' : 'primary'}
+            variant={registrationOpen ? 'secondary' : 'primary'}
             onClick={toggleAdmissions}
-            disabled={admissionsUnavailable}
+            disabled={admissionsUnavailable || intakeStarted}
           >
-            {intake.admissionsOpen ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
-            {intake.admissionsOpen ? 'Close admissions' : 'Open admissions'}
+            {registrationOpen ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
+            {intakeStarted ? 'Intake has started' : registrationOpen ? 'Lock registration' : 'Unlock registration'}
           </Button>
           <Select
             aria-label="Intake status"
@@ -178,7 +176,7 @@ export default function IntakeDetailPage() {
           />
         </div>
         <p className="intake-admissions-note">
-          Opening admissions makes this intake available before its admission start date. The admission end date remains the deadline.
+          Registration stays open until the academic start time. Lock it early here if needed; started intakes are automatically removed from signup.
         </p>
       </section>
 
@@ -191,7 +189,7 @@ export default function IntakeDetailPage() {
         </div>
         {editing && (
           <form onSubmit={updateDetails} className="intake-form">
-            <p className="intake-period-hint">The academic start is entered in the selected IANA timezone. Each date must fall within the selected GATE period and year.</p>
+            <p className="intake-period-hint">The academic start is entered in the selected IANA timezone. Academic dates must fall within the selected GATE period and year.</p>
             <div className="intake-form-grid">
               <Select
                 label="GATE"
@@ -220,8 +218,6 @@ export default function IntakeDetailPage() {
               />
               <Input label="Year" type="number" min="2000" max="9999" value={editForm.year} onChange={(value) => setEditForm((current) => ({ ...current, year: value }))} required />
               <Input label="Timezone (IANA)" placeholder="UTC or Africa/Lagos" value={editForm.timezone} onChange={(value) => setEditForm((current) => ({ ...current, timezone: value }))} required />
-              <Input label="Admission start" type="date" value={editForm.admissionStartDate} onChange={(value) => setEditForm((current) => ({ ...current, admissionStartDate: value }))} required />
-              <Input label="Admission end" type="date" value={editForm.admissionEndDate} onChange={(value) => setEditForm((current) => ({ ...current, admissionEndDate: value }))} required />
               <Input label={`Academic start (${editForm.timezone || 'UTC'})`} type="datetime-local" value={editForm.academicStartDate} onChange={(value) => setEditForm((current) => ({ ...current, academicStartDate: value }))} required />
               <Input label="Academic end" type="date" value={editForm.academicEndDate} onChange={(value) => setEditForm((current) => ({ ...current, academicEndDate: value }))} required />
             </div>
@@ -285,13 +281,13 @@ export default function IntakeDetailPage() {
                 </option>
               ))}
             </select>
-            <small>Use Ctrl or Command to select more than one.</small>
+            <small>Active program offerings are available on signup until registration is locked or the intake starts.</small>
           </label>
           <Select
             label="Initial offering status"
             value={offeringStatus}
             onChange={setOfferingStatus}
-            options={[{ value: 'INACTIVE', label: 'Inactive' }, { value: 'ACTIVE', label: 'Active' }]}
+            options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
             disabled={admissionsUnavailable}
           />
           <Button type="submit" disabled={!selectedProgrammeIds.length || admissionsUnavailable}>

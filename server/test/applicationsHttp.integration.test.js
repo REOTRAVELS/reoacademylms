@@ -52,7 +52,6 @@ const send = (server, path, { method = 'GET', body, user = admin } = {}) => fetc
 const restoreAuth = (user = admin) => stubMethod(prisma.user, 'findUnique', async () => user);
 
 const openOffering = () => {
-  const today = new Date().toISOString().slice(0, 10);
   return {
     id: 'offering-1',
     status: 'ACTIVE',
@@ -60,30 +59,26 @@ const openOffering = () => {
       id: 'intake-1',
       status: 'ACTIVE',
       admissionsOpen: true,
-      admissionStartDate: today,
-      admissionEndDate: today,
+      academicStartDate: new Date(Date.now() + 86_400_000),
       timezone: 'UTC',
     },
     programme: { id: 'programme-1', status: 'ACTIVE' },
   };
 };
 
-test('manually opened future intakes accept applications before the admission start date', () => {
+test('future intakes accept applications until the academic start time and can be manually locked', () => {
   const offering = {
     status: 'ACTIVE',
     programme: { status: 'ACTIVE' },
     intake: {
       status: 'UPCOMING',
       admissionsOpen: true,
-      admissionStartDate: new Date('2027-01-01T00:00:00.000Z'),
-      admissionEndDate: new Date('2027-01-14T00:00:00.000Z'),
       academicStartDate: new Date('2027-01-15T09:30:00.000Z'),
-      timezone: 'UTC',
     },
   };
 
   assert.equal(isOfferingOpenForApplications(offering, new Date('2026-11-17T12:00:00.000Z')), true);
-  assert.equal(isOfferingOpenForApplications(offering, new Date('2027-01-15T12:00:00.000Z')), false);
+  assert.equal(isOfferingOpenForApplications(offering, new Date('2027-01-15T09:30:00.000Z')), false);
   assert.equal(isOfferingOpenForApplications({
     ...offering,
     intake: { ...offering.intake, admissionsOpen: false },

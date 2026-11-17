@@ -6,8 +6,6 @@ const monthsBySeason = {
 };
 
 const dateLabels = {
-  admissionStartDate: 'Admission start',
-  admissionEndDate: 'Admission end',
   academicStartDate: 'Academic start',
   academicEndDate: 'Academic end',
 };

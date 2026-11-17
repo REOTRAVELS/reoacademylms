@@ -8,21 +8,6 @@ export class AdmissionsError extends Error {
   }
 }
 
-const dateOnly = (value) => (
-  typeof value === 'string' ? value.slice(0, 10) : value.toISOString().slice(0, 10)
-);
-
-const dateInTimezone = (date, timezone) => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-
 export const isOfferingOpenForApplications = (offering, now = new Date()) => {
   if (
     !offering
@@ -31,15 +16,19 @@ export const isOfferingOpenForApplications = (offering, now = new Date()) => {
     || !['UPCOMING', 'ACTIVE'].includes(offering.intake.status)
     || offering.programme?.status !== 'ACTIVE'
   ) return false;
-  const today = dateInTimezone(now, offering.intake.timezone);
-  return today <= dateOnly(offering.intake.admissionEndDate);
+  const academicStartDate = new Date(offering.intake.academicStartDate);
+  return Number.isFinite(academicStartDate.getTime()) && academicStartDate > now;
 };
 
 export const listOpenOfferings = async (now = new Date()) => {
   const offerings = await prisma.intakeProgramOffering.findMany({
     where: {
       status: 'ACTIVE',
-      intake: { admissionsOpen: true, status: { in: ['UPCOMING', 'ACTIVE'] } },
+      intake: {
+        admissionsOpen: true,
+        status: { in: ['UPCOMING', 'ACTIVE'] },
+        academicStartDate: { gt: now },
+      },
       programme: { status: 'ACTIVE' },
     },
     include: {
@@ -50,8 +39,6 @@ export const listOpenOfferings = async (now = new Date()) => {
           gateNumber: true,
           season: true,
           year: true,
-          admissionStartDate: true,
-          admissionEndDate: true,
           academicStartDate: true,
           academicEndDate: true,
           timezone: true,
@@ -68,16 +55,18 @@ const findOpenOffering = async (tx, programOfferingId, now) => {
     where: {
       id: programOfferingId,
       status: 'ACTIVE',
-      intake: { admissionsOpen: true, status: { in: ['UPCOMING', 'ACTIVE'] } },
+      intake: {
+        admissionsOpen: true,
+        status: { in: ['UPCOMING', 'ACTIVE'] },
+        academicStartDate: { gt: now },
+      },
       programme: { status: 'ACTIVE' },
     },
     include: {
       intake: {
         select: {
           id: true,
-          admissionStartDate: true,
-          admissionEndDate: true,
-          timezone: true,
+          academicStartDate: true,
         },
       },
       programme: { select: { id: true, status: true } },

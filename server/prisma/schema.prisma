@@ -248,12 +248,12 @@ model Intake {
   gateNumber         Int
   season             IntakeSeason
   year               Int
-  admissionStartDate DateTime                @db.Date
-  admissionEndDate   DateTime                @db.Date
+  admissionStartDate DateTime?               @db.Date
+  admissionEndDate   DateTime?               @db.Date
   academicStartDate  DateTime                @db.Timestamptz(3)
   academicEndDate    DateTime                @db.Date
   timezone           String                  @default("UTC")
-  admissionsOpen     Boolean                 @default(false)
+  admissionsOpen     Boolean                 @default(true)
   status             IntakeStatus            @default(UPCOMING)
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
@@ -269,7 +269,7 @@ model IntakeProgramOffering {
   intake             Intake                      @relation(fields: [intakeId], references: [id], onDelete: Restrict)
   programmeId        String
   programme          Programme                   @relation(fields: [programmeId], references: [id], onDelete: Restrict)
-  status             IntakeProgramOfferingStatus @default(INACTIVE)
+  status             IntakeProgramOfferingStatus @default(ACTIVE)
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cohorts            Cohort[]

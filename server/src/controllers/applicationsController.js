@@ -12,8 +12,6 @@ const offeringInclude = {
       gateNumber: true,
       season: true,
       year: true,
-      admissionStartDate: true,
-      admissionEndDate: true,
       academicStartDate: true,
       academicEndDate: true,
       timezone: true,

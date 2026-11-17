@@ -112,7 +112,7 @@ describe('StudentDashboard', () => {
 
     expect(await screen.findByText('Your learning journey begins soon.')).toBeTruthy();
     expect(screen.getByText('Travel Operations')).toBeTruthy();
-    expect(screen.getByText(/Starts in/)).toBeTruthy();
+    expect(screen.getByText('Class begins in')).toBeTruthy();
     expect(progressAPI.mine).not.toHaveBeenCalled();
   });
 

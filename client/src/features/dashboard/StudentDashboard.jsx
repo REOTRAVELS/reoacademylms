@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Bell, BookOpen, CalendarDays, CalendarClock, ClipboardCheck, GraduationCap, Video } from 'lucide-react';
+import { ArrowUpRight, Bell, BookOpen, CalendarDays, CalendarClock, ClipboardCheck, GraduationCap, ShieldCheck, Sparkles, Video } from 'lucide-react';
 import { dashboardAPI, progressAPI } from '../../services/api';
 import { statusClass, statusLabel } from '../../components/common/navConfig';
 import DashboardLoadError from './DashboardLoadError';
@@ -112,19 +112,27 @@ export default function StudentDashboard() {
   if (waitingForIntake) {
     const countdown = formatCountdown(remaining);
     return (
-      <div className="page-stack">
+      <div className="page-stack intake-countdown-page">
         <section className="intake-waiting-hero">
           <div className="intake-waiting-copy">
-            <span className="eyebrow eyebrow-light">Program enrollment active</span>
-            <h1>Your learning journey begins soon.</h1>
-            <p>Your assigned Program enrollment is active. Academic materials will become available automatically when your Intake starts.</p>
-            <div className="intake-waiting-program">
-              <GraduationCap size={19} />
-              <span><strong>{data.intake.programmeTitle}</strong><small>GATE {String(data.intake.gateNumber).padStart(2, '0')} · {data.intake.season} {data.intake.year}</small></span>
+            <div className="intake-waiting-brand">
+              <img src="/reo.png" alt="" />
+              <span>REO TRAVEL ACADEMY<small>LEARN · LEAD · EXCEL</small></span>
             </div>
+            <span className="intake-waiting-pill"><Sparkles size={14} /> Your place is confirmed</span>
+            <h1>Your learning journey begins soon.</h1>
+            <p>You’re officially enrolled. Your learning space is being prepared, and your courses will unlock automatically when your Intake begins.</p>
+            <div className="intake-waiting-program">
+              <span className="intake-waiting-program-icon"><GraduationCap size={21} /></span>
+              <span><small>YOUR PROGRAM</small><strong>{data.intake.programmeTitle}</strong><small>GATE {String(data.intake.gateNumber).padStart(2, '0')} · {data.intake.season} {data.intake.year}</small></span>
+            </div>
+            <div className="intake-waiting-assurance"><ShieldCheck size={16} /> Approved enrollment · secure access at your start time</div>
           </div>
           <div className="intake-countdown" role={countdown ? 'timer' : 'status'} aria-label={countdown ? 'Time until Intake starts' : 'Intake start time unavailable'}>
-            <span className="intake-countdown-label"><CalendarClock size={17} /> {countdown ? 'Starts in' : 'Start time unavailable'}</span>
+            <div className="intake-countdown-heading">
+              <span className="intake-countdown-kicker"><CalendarClock size={15} /> THE COUNTDOWN IS ON</span>
+              <strong>{countdown ? 'Class begins in' : 'Start time unavailable'}</strong>
+            </div>
             {countdown ? <div className="intake-countdown-values">
               {[
                 ['Days', countdown.days],
@@ -134,16 +142,28 @@ export default function StudentDashboard() {
               ].map(([label, value]) => (
                 <span key={label}><strong>{String(value).padStart(2, '0')}</strong><small>{label}</small></span>
               ))}
-            </div> : <p>The official start time could not be read. Access remains controlled by the academy server.</p>}
-            <p>{formatIntakeStart(data.intake.academicStartDate, data.intake.timezone)} <span>({data.intake.timezone})</span></p>
+            </div> : <p className="intake-countdown-error">The official start time could not be read. Access remains controlled by the academy server.</p>}
+            <div className="intake-countdown-date">
+              <CalendarDays size={17} />
+              <span><strong>{formatIntakeStart(data.intake.academicStartDate, data.intake.timezone)}</strong><small>{data.intake.timezone}</small></span>
+            </div>
           </div>
+          <span className="intake-waiting-orbit intake-waiting-orbit-one" aria-hidden="true" />
+          <span className="intake-waiting-orbit intake-waiting-orbit-two" aria-hidden="true" />
         </section>
-        <section className="card intake-waiting-note">
-          <span className="intake-waiting-icon"><GraduationCap size={20} /></span>
-          <div>
-            <h2>Everything is ready for your Intake</h2>
-            <p>Access is checked securely by the academy server. Keep this page open or return later; it will refresh your access when the start time arrives.</p>
-          </div>
+        <section className="intake-waiting-next-steps" aria-label="What happens next">
+          <article>
+            <span className="intake-next-icon"><ShieldCheck size={19} /></span>
+            <span><strong>You’re all set</strong><small>Your approved place in this program is secured.</small></span>
+          </article>
+          <article>
+            <span className="intake-next-icon"><CalendarClock size={19} /></span>
+            <span><strong>We’ll keep time</strong><small>This countdown updates live and checks your access at launch.</small></span>
+          </article>
+          <article>
+            <span className="intake-next-icon"><GraduationCap size={19} /></span>
+            <span><strong>Learning unlocks automatically</strong><small>Coursework stays protected until your official start time.</small></span>
+          </article>
         </section>
       </div>
     );

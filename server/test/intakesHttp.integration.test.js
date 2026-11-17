@@ -15,8 +15,6 @@ const sampleIntake = {
   gateNumber: 1,
   season: 'WINTER',
   year: 2027,
-  admissionStartDate: '2027-01-01',
-  admissionEndDate: '2027-01-14',
   academicStartDate: '2027-01-15',
   academicEndDate: '2027-03-31',
   timezone: 'UTC',
@@ -76,7 +74,7 @@ test('intake creation rejects mismatched gate-season pairs and invalid calendar 
 
     const invalidDate = await send(server, '/intakes', {
       method: 'POST',
-      body:       { ...sampleIntake, admissionStartDate: '2027-02-30' },
+      body: { ...sampleIntake, academicEndDate: '2027-02-30' },
     });
     assert.equal(invalidDate.status, 400);
     assert.match((await invalidDate.json()).message, /valid YYYY-MM-DD/i);
@@ -94,12 +92,38 @@ test('intake creation rejects mismatched gate-season pairs and invalid calendar 
   }
 });
 
+test('new intakes are open for registration by default without admission dates', async () => {
+  let createdData;
+  const restores = [
+    authRestore(),
+    stubMethod(prisma.intake, 'create', async ({ data }) => {
+      createdData = data;
+      return { id: 'intake-1', ...data };
+    }),
+    stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/intakes', {
+      method: 'POST',
+      body: sampleIntake,
+    });
+    assert.equal(response.status, 201);
+    assert.equal(createdData.admissionsOpen, true);
+    assert.equal(createdData.status, 'UPCOMING');
+    assert.equal('admissionStartDate' in createdData, false);
+    assert.equal('admissionEndDate' in createdData, false);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
 test('intake start updates interpret local time in the selected timezone and audit the change', async () => {
   const current = {
     id: 'intake-1',
     ...sampleIntake,
-    admissionStartDate: new Date('2027-01-01T00:00:00.000Z'),
-    admissionEndDate: new Date('2027-01-14T00:00:00.000Z'),
     academicStartDate: new Date('2027-01-15T00:00:00.000Z'),
     academicEndDate: new Date('2027-03-31T00:00:00.000Z'),
     admissionsOpen: false,
@@ -132,6 +156,39 @@ test('intake start updates interpret local time in the selected timezone and aud
     assert.equal(auditMetadata.previousAcademicStartDate, '2027-01-15T00:00:00.000Z');
     assert.equal(auditMetadata.academicStartDate, '2027-01-15T14:30:00.000Z');
     assert.equal(auditMetadata.timezone, 'America/New_York');
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('registration cannot be reopened after the academic start time', async () => {
+  const current = {
+    id: 'intake-1',
+    ...sampleIntake,
+    academicStartDate: new Date(Date.now() - 1_000),
+    admissionsOpen: false,
+    status: 'UPCOMING',
+  };
+  let updateCalled = false;
+  const restores = [
+    authRestore(),
+    stubMethod(prisma.intake, 'findUnique', async () => current),
+    stubMethod(prisma.intake, 'update', async () => {
+      updateCalled = true;
+      return current;
+    }),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/intakes/intake-1', {
+      method: 'PUT',
+      body: { admissionsOpen: true },
+    });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).message, /automatically locked/i);
+    assert.equal(updateCalled, false);
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
@@ -172,8 +229,6 @@ test('admins can review the latest start-time audit history for an intake', asyn
     stubMethod(prisma.intake, 'findUnique', async () => ({
       id: 'intake-1',
       ...sampleIntake,
-      admissionStartDate: new Date('2027-01-01T00:00:00.000Z'),
-      admissionEndDate: new Date('2027-01-14T00:00:00.000Z'),
       academicStartDate: new Date('2027-01-15T00:00:00.000Z'),
       academicEndDate: new Date('2027-03-31T00:00:00.000Z'),
       programOfferings: [],
@@ -217,7 +272,7 @@ test('intake creation maps duplicate gate and year to a conflict response', asyn
     server = await startServer();
     const first = await send(server, '/intakes', { method: 'POST', body: sampleIntake });
     assert.equal(first.status, 201);
-    assert.equal((await first.json()).data.admissionsOpen, false);
+    assert.equal((await first.json()).data.admissionsOpen, true);
 
     const duplicate = await send(server, '/intakes', { method: 'POST', body: sampleIntake });
     assert.equal(duplicate.status, 409);
@@ -263,7 +318,7 @@ test('admins can add multiple programs atomically and duplicate offerings are re
     server = await startServer();
     const added = await send(server, '/intakes/intake-1/offerings', {
       method: 'POST',
-      body: { programmeIds: ['programme-1', 'programme-2'], status: 'ACTIVE' },
+      body: { programmeIds: ['programme-1', 'programme-2'] },
     });
     assert.equal(added.status, 201);
     assert.equal((await added.json()).data.length, 2);
@@ -271,7 +326,7 @@ test('admins can add multiple programs atomically and duplicate offerings are re
 
     const duplicate = await send(server, '/intakes/intake-1/offerings', {
       method: 'POST',
-      body: { programmeIds: ['programme-1'], status: 'ACTIVE' },
+      body: { programmeIds: ['programme-1'] },
     });
     assert.equal(duplicate.status, 409);
     assert.equal(createManyCount, 1);
@@ -285,8 +340,6 @@ test('offering removal is blocked by cohort, application, or enrollment history'
   const current = {
     id: 'intake-1',
     ...sampleIntake,
-    admissionStartDate: new Date(`${sampleIntake.admissionStartDate}T00:00:00.000Z`),
-    admissionEndDate: new Date(`${sampleIntake.admissionEndDate}T00:00:00.000Z`),
     academicStartDate: new Date(`${sampleIntake.academicStartDate}T00:00:00.000Z`),
     academicEndDate: new Date(`${sampleIntake.academicEndDate}T00:00:00.000Z`),
     admissionsOpen: true,

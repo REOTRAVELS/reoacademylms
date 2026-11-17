@@ -138,7 +138,7 @@ export const createIntake = async (req, res) => {
         ...data,
         timezone: data.timezone || 'UTC',
         status: data.status || 'UPCOMING',
-        admissionsOpen: data.admissionsOpen ?? false,
+        admissionsOpen: data.admissionsOpen ?? !['ARCHIVED', 'COMPLETED'].includes(data.status),
       },
     });
     await audit({
@@ -158,6 +158,9 @@ export const createIntake = async (req, res) => {
 export const updateIntake = async (req, res) => {
   const current = await prisma.intake.findUnique({ where: { id: req.params.id } });
   if (!current) return fail(res, 'Intake not found.', 404);
+  if (req.body?.admissionsOpen === true && current.academicStartDate <= new Date()) {
+    return fail(res, 'Registration is automatically locked after the intake start time.', 409);
+  }
 
   const currentInput = {
     gateNumber: current.gateNumber,
@@ -210,7 +213,7 @@ export const updateIntake = async (req, res) => {
 };
 
 export const addIntakeOfferings = async (req, res) => {
-  const { programmeIds, status = 'INACTIVE' } = req.body || {};
+  const { programmeIds, status = 'ACTIVE' } = req.body || {};
   if (!Array.isArray(programmeIds) || programmeIds.length === 0 ||
       programmeIds.some((id) => typeof id !== 'string' || id.trim() === '') ||
       new Set(programmeIds).size !== programmeIds.length) {

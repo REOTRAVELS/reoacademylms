@@ -20,12 +20,10 @@ const monthsBySeason = {
 const intakeStatuses = new Set(['UPCOMING', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
 const intakeSeasons = new Set(Object.values(seasonsByGate));
 const dateFields = [
-  'admissionStartDate',
-  'admissionEndDate',
   'academicStartDate',
   'academicEndDate',
 ];
-const dateOnlyFields = ['admissionStartDate', 'admissionEndDate', 'academicEndDate'];
+const dateOnlyFields = ['academicEndDate'];
 
 const parseDateOnly = (value) => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -99,17 +97,10 @@ export const validateIntake = (input) => {
   }
   data.academicStartDate = parsedStart.date;
 
-  if (data.admissionStartDate > data.admissionEndDate) {
-    return { error: 'Admission end date must be on or after the admission start date.' };
-  }
   const academicStartLocalDate = localDateInTimezone(data.academicStartDate, timeZone);
   const academicEndDate = data.academicEndDate.toISOString().slice(0, 10);
-  const admissionEndDate = data.admissionEndDate.toISOString().slice(0, 10);
   if (academicStartLocalDate >= academicEndDate) {
     return { error: 'Academic end date must be after the academic start date.' };
-  }
-  if (admissionEndDate > academicStartLocalDate) {
-    return { error: 'Admissions must close on or before the academic start date.' };
   }
   if (data.season && data.year) {
     for (const field of dateFields) {
