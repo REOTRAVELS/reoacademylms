@@ -60,7 +60,7 @@ export default function ReactionLayer({ floating }) {
           className="rt-float"
           style={{ left: `${reaction.left}%`, '--drift': `${reaction.drift}px` }}
         >
-          <span className="rt-float-emoji">{reaction.emoji}</span>
+          <span className="rt-emoji rt-float-emoji">{reaction.emoji}</span>
           <span className="rt-float-name">{reaction.name}</span>
         </div>
       ))}

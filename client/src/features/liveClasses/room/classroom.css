@@ -1015,6 +1015,14 @@
     transform 0.12s,
     background 0.12s;
 }
+.rt-emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-variant-emoji: emoji;
+}
+.rt-reaction-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
 .rt-reaction:hover {
   background: var(--rt-hover);
   transform: scale(1.18) translateY(-2px);
@@ -1171,15 +1179,18 @@
 @keyframes rt-rise {
   0% {
     opacity: 0;
-    transform: translate(0, 10px) scale(0.5);
+    transform: translate(0, 10px);
   }
-  12% {
+  8% {
     opacity: 1;
-    transform: translate(0, -30px) scale(1.1);
+    transform: translate(0, -10px);
+  }
+  85% {
+    opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--drift), -62vh) scale(1);
+    transform: translate(var(--drift), -62vh);
   }
 }
 

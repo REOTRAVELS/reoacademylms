@@ -55,7 +55,7 @@ export default function SettingsPage() {
       await refreshUser();
       setSuccess('Profile picture updated.');
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not update your profile picture.');
+      setError(requestError.response?.data?.message || requestError.message || 'Could not update your profile picture.');
     } finally {
       setPhotoLoading(false);
       event.target.value = '';
