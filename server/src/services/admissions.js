@@ -32,7 +32,7 @@ export const listOpenOfferings = async (now = new Date()) => {
       programme: { status: 'ACTIVE' },
     },
     include: {
-      programme: { select: { id: true, title: true, qualificationType: true } },
+      programme: { select: { id: true, title: true, qualificationType: true, status: true } },
       intake: {
         select: {
           id: true,
@@ -42,6 +42,8 @@ export const listOpenOfferings = async (now = new Date()) => {
           academicStartDate: true,
           academicEndDate: true,
           timezone: true,
+          admissionsOpen: true,
+          status: true,
         },
       },
     },
@@ -66,6 +68,8 @@ const findOpenOffering = async (tx, programOfferingId, now) => {
       intake: {
         select: {
           id: true,
+          admissionsOpen: true,
+          status: true,
           academicStartDate: true,
         },
       },

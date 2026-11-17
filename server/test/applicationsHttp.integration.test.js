@@ -8,7 +8,7 @@ process.env.EMAIL_FROM = '';
 process.env.SMTP_URL = '';
 process.env.SMTP_FROM = '';
 
-const [{ default: app }, { default: prisma }, { signToken }, { isOfferingOpenForApplications }] = await Promise.all([
+const [{ default: app }, { default: prisma }, { signToken }, { isOfferingOpenForApplications, listOpenOfferings }] = await Promise.all([
   import('../src/app.js'),
   import('../src/config/database.js'),
   import('../src/utils/jwt.js'),
@@ -66,6 +66,16 @@ const openOffering = () => {
   };
 };
 
+const projectSelectedFields = (record, select) => Object.fromEntries(
+  Object.keys(select).map((field) => [field, record[field]]),
+);
+
+const applyOfferingInclude = (offering, include) => ({
+  ...offering,
+  intake: projectSelectedFields(offering.intake, include.intake.select),
+  programme: projectSelectedFields(offering.programme, include.programme.select),
+});
+
 test('future intakes accept applications until the academic start time and can be manually locked', () => {
   const offering = {
     status: 'ACTIVE',
@@ -83,6 +93,22 @@ test('future intakes accept applications until the academic start time and can b
     ...offering,
     intake: { ...offering.intake, admissionsOpen: false },
   }, new Date('2026-11-17T12:00:00.000Z')), false);
+});
+
+test('signup listing selects all fields needed to verify offering eligibility', async () => {
+  const now = new Date('2026-11-17T12:00:00.000Z');
+  const offering = openOffering();
+  offering.intake.academicStartDate = new Date('2027-01-15T09:30:00.000Z');
+  const restore = stubMethod(prisma.intakeProgramOffering, 'findMany', async ({ include }) => [
+    applyOfferingInclude(offering, include),
+  ]);
+  try {
+    const offerings = await listOpenOfferings(now);
+    assert.equal(offerings.length, 1);
+    assert.equal(offerings[0].id, offering.id);
+  } finally {
+    restore();
+  }
 });
 
 test('registration creates a pending account and its single Program application in one transaction', async () => {
@@ -114,7 +140,9 @@ test('registration creates a pending account and its single Program application 
           },
         },
         programApplicationStatusHistory: { create: async () => ({ id: 'history-1' }) },
-        intakeProgramOffering: { findFirst: async () => todayOffering },
+        intakeProgramOffering: {
+          findFirst: async ({ include }) => applyOfferingInclude(todayOffering, include),
+        },
       };
       return operation(tx);
     }),
