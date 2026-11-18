@@ -32,6 +32,7 @@ export default function MainLayout() {
   const [notificationError, setNotificationError] = useState('');
   const [notificationCountError, setNotificationCountError] = useState('');
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [failedAvatarSrc, setFailedAvatarSrc] = useState('');
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,6 +51,11 @@ export default function MainLayout() {
               : 'Academy workspace'
   );
   const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase();
+  const avatar = () => (
+    avatarSrc && failedAvatarSrc !== avatarSrc
+      ? <img className="user-avatar" src={avatarSrc} alt="" onError={() => setFailedAvatarSrc(avatarSrc)} />
+      : <span className="user-avatar">{initials || 'R'}</span>
+  );
 
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -156,9 +162,7 @@ export default function MainLayout() {
         </div>
 
         <div className="sidebar-footer">
-          {avatarSrc
-            ? <img className="user-avatar" src={avatarSrc} alt="" crossOrigin="use-credentials" />
-            : <div className="user-avatar">{initials || 'R'}</div>}
+          {avatar()}
           <div className="user-details">
             <strong>{user?.firstName} {user?.lastName}</strong>
             <span>{roleLabel(role)}</span>
@@ -202,9 +206,7 @@ export default function MainLayout() {
               </section>}
             </div>}
             <button className="topbar-profile" onClick={() => navigate('/settings')} aria-label="Open account settings">
-              {avatarSrc
-                ? <img className="user-avatar" src={avatarSrc} alt="" crossOrigin="use-credentials" />
-                : <span className="user-avatar">{initials || 'R'}</span>}
+              {avatar()}
               <span>{user?.firstName}</span>
             </button>
           </div>
