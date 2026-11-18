@@ -7,15 +7,20 @@ import { notificationsAPI, usersAPI } from '../../services/api';
 
 const pageTitles = {
   '/dashboard': 'Overview',
+  '/applications': 'Applications',
   '/students': 'Student directory',
+  '/students/new': 'Invite a student',
   '/trainers': 'Trainer directory',
   '/programmes': 'Programmes',
+  '/program-assignments': 'Program assignments',
+  '/notifications/admin': 'Notification review',
   '/cohorts': 'Cohorts',
   '/courses': 'Courses',
   '/assessments': 'Assessments',
   '/live-classes': 'Live classes',
   '/calendar': 'Academic calendar',
   '/communications': 'Communications',
+  '/intakes': 'Intakes',
   '/settings': 'Settings',
 };
 
@@ -37,7 +42,12 @@ export default function MainLayout() {
     : navItems(role);
   const avatarSrc = usersAPI.avatarImageUrl(user?.avatarUrl);
   const title = pageTitles[location.pathname] || (
-    location.pathname.startsWith('/students/') ? 'Student profile' : 'Academy workspace'
+    location.pathname.startsWith('/students/') ? 'Student profile'
+      : location.pathname.includes('/builder') ? 'Course builder'
+        : location.pathname.startsWith('/courses/') ? 'Course details'
+          : location.pathname.startsWith('/intakes/') ? 'Intake details'
+            : location.pathname.startsWith('/cohorts/') ? 'Cohort details'
+              : 'Academy workspace'
   );
   const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase();
 

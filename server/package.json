@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/package.json",
   "name": "reo-academy-server",
   "version": "1.0.0",
   "private": true,
