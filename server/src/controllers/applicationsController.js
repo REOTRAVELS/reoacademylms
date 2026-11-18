@@ -12,8 +12,6 @@ const offeringInclude = {
       gateNumber: true,
       season: true,
       year: true,
-      academicStartDate: true,
-      academicEndDate: true,
       timezone: true,
     },
   },
@@ -130,13 +128,13 @@ const reviewApplication = async (req, res, decision) => {
               intakeId: true,
               programmeId: true,
               status: true,
+              academicStartDate: true,
               intake: {
                 select: {
                   status: true,
                   gateNumber: true,
                   season: true,
                   year: true,
-                  academicStartDate: true,
                   timezone: true,
                 },
               },
@@ -253,7 +251,7 @@ const reviewApplication = async (req, res, decision) => {
               dateStyle: 'long',
               timeStyle: 'short',
               timeZone: application.programOffering.intake.timezone,
-            }).format(application.programOffering.intake.academicStartDate)} (${application.programOffering.intake.timezone}).`
+            }).format(application.programOffering.academicStartDate)} (${application.programOffering.intake.timezone}).`
             : `Your application was not approved. ${rejectionReason.trim()}`,
         },
       });

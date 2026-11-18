@@ -121,14 +121,14 @@ export default function StudentDashboard() {
             </div>
             <span className="intake-waiting-pill"><Sparkles size={14} /> Your place is confirmed</span>
             <h1>Your learning journey begins soon.</h1>
-            <p>You’re officially enrolled. Your learning space is being prepared, and your courses will unlock automatically when your Intake begins.</p>
+            <p>You’re officially enrolled. Your learning space is being prepared, and your courses will unlock automatically when your Program begins.</p>
             <div className="intake-waiting-program">
               <span className="intake-waiting-program-icon"><GraduationCap size={21} /></span>
               <span><small>YOUR PROGRAM</small><strong>{data.intake.programmeTitle}</strong><small>GATE {String(data.intake.gateNumber).padStart(2, '0')} · {data.intake.season} {data.intake.year}</small></span>
             </div>
             <div className="intake-waiting-assurance"><ShieldCheck size={16} /> Approved enrollment · secure access at your start time</div>
           </div>
-          <div className="intake-countdown" role={countdown ? 'timer' : 'status'} aria-label={countdown ? 'Time until Intake starts' : 'Intake start time unavailable'}>
+          <div className="intake-countdown" role={countdown ? 'timer' : 'status'} aria-label={countdown ? 'Time until Program starts' : 'Program start time unavailable'}>
             <div className="intake-countdown-heading">
               <span className="intake-countdown-kicker"><CalendarClock size={15} /> THE COUNTDOWN IS ON</span>
               <strong>{countdown ? 'Class begins in' : 'Start time unavailable'}</strong>
@@ -162,7 +162,7 @@ export default function StudentDashboard() {
           </article>
           <article>
             <span className="intake-next-icon"><GraduationCap size={19} /></span>
-            <span><strong>Learning unlocks automatically</strong><small>Coursework stays protected until your official start time.</small></span>
+            <span><strong>Learning unlocks automatically</strong><small>Coursework stays protected until your Program’s official start time.</small></span>
           </article>
         </section>
       </div>

@@ -198,7 +198,7 @@ export const studentDashboard = async (req, res) => {
         gateNumber: intake.gateNumber,
         season: intake.season,
         year: intake.year,
-        academicStartDate: intake.academicStartDate,
+        academicStartDate: req.waitingProgramEnrollment.programOffering.academicStartDate,
         timezone: intake.timezone,
         programmeTitle: programme.title,
       },

@@ -55,11 +55,11 @@ const openOffering = () => {
   return {
     id: 'offering-1',
     status: 'ACTIVE',
+    academicStartDate: new Date(Date.now() + 86_400_000),
     intake: {
       id: 'intake-1',
       status: 'ACTIVE',
       admissionsOpen: true,
-      academicStartDate: new Date(Date.now() + 86_400_000),
       timezone: 'UTC',
     },
     programme: { id: 'programme-1', status: 'ACTIVE' },
@@ -83,8 +83,8 @@ test('future intakes accept applications until the academic start time and can b
     intake: {
       status: 'UPCOMING',
       admissionsOpen: true,
-      academicStartDate: new Date('2027-01-15T09:30:00.000Z'),
     },
+    academicStartDate: new Date('2027-01-15T09:30:00.000Z'),
   };
 
   assert.equal(isOfferingOpenForApplications(offering, new Date('2026-11-17T12:00:00.000Z')), true);
@@ -98,7 +98,7 @@ test('future intakes accept applications until the academic start time and can b
 test('signup listing selects all fields needed to verify offering eligibility', async () => {
   const now = new Date('2026-11-17T12:00:00.000Z');
   const offering = openOffering();
-  offering.intake.academicStartDate = new Date('2027-01-15T09:30:00.000Z');
+  offering.academicStartDate = new Date('2027-01-15T09:30:00.000Z');
   const restore = stubMethod(prisma.intakeProgramOffering, 'findMany', async ({ include }) => [
     applyOfferingInclude(offering, include),
   ]);
@@ -190,12 +190,12 @@ test('application approval atomically records enrollment, account activation, hi
       intakeId: 'intake-1',
       programmeId: 'programme-1',
       status: 'ACTIVE',
+      academicStartDate: new Date('2027-01-15T09:00:00.000Z'),
       intake: {
         status: 'ACTIVE',
         gateNumber: 1,
         season: 'WINTER',
         year: 2027,
-        academicStartDate: new Date('2027-01-15T09:00:00.000Z'),
         timezone: 'UTC',
       },
       programme: { status: 'ACTIVE', title: 'Travel Operations' },

@@ -16,7 +16,7 @@ export const isOfferingOpenForApplications = (offering, now = new Date()) => {
     || !['UPCOMING', 'ACTIVE'].includes(offering.intake.status)
     || offering.programme?.status !== 'ACTIVE'
   ) return false;
-  const academicStartDate = new Date(offering.intake.academicStartDate);
+  const academicStartDate = new Date(offering.academicStartDate);
   return Number.isFinite(academicStartDate.getTime()) && academicStartDate > now;
 };
 
@@ -27,8 +27,8 @@ export const listOpenOfferings = async (now = new Date()) => {
       intake: {
         admissionsOpen: true,
         status: { in: ['UPCOMING', 'ACTIVE'] },
-        academicStartDate: { gt: now },
       },
+      academicStartDate: { gt: now },
       programme: { status: 'ACTIVE' },
     },
     include: {
@@ -39,8 +39,6 @@ export const listOpenOfferings = async (now = new Date()) => {
           gateNumber: true,
           season: true,
           year: true,
-          academicStartDate: true,
-          academicEndDate: true,
           timezone: true,
           admissionsOpen: true,
           status: true,
@@ -60,8 +58,8 @@ const findOpenOffering = async (tx, programOfferingId, now) => {
       intake: {
         admissionsOpen: true,
         status: { in: ['UPCOMING', 'ACTIVE'] },
-        academicStartDate: { gt: now },
       },
+      academicStartDate: { gt: now },
       programme: { status: 'ACTIVE' },
     },
     include: {
@@ -70,7 +68,6 @@ const findOpenOffering = async (tx, programOfferingId, now) => {
           id: true,
           admissionsOpen: true,
           status: true,
-          academicStartDate: true,
         },
       },
       programme: { select: { id: true, status: true } },

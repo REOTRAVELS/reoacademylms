@@ -618,8 +618,8 @@ const createCourseStructure = async (database, programme, cohortIds, academicEnd
 };
 
 const createAssessmentSet = async (database, course, programme, offering, intake) => {
-  const start = intake.academicStartDate;
-  const end = endOfUtcDate(intake.academicEndDate);
+  const start = offering.academicStartDate;
+  const end = endOfUtcDate(offering.academicEndDate);
   const examStart = new Date(end.getTime() - (14 * 24 * 60 * 60 * 1000));
   const createQuestions = () => programme.questions.map((question, position) => ({
     type: 'MULTIPLE_CHOICE',
@@ -674,18 +674,17 @@ const createAssessmentSet = async (database, course, programme, offering, intake
 const createAcademicStructure = async (database, superAdminIds) => {
   const intakes = [];
   for (const entry of intakeCalendar) {
-    intakes.push(await database.intake.create({
+    const intake = await database.intake.create({
       data: {
         gateNumber: entry.gateNumber,
         season: entry.season,
         year: 2027,
-        academicStartDate: new Date(entry.academicStart),
-        academicEndDate: toUtcDate(entry.academicEnd),
         timezone: 'UTC',
         admissionsOpen: true,
         status: 'UPCOMING',
       },
-    }));
+    });
+    intakes.push({ intake, calendar: entry });
   }
 
   const programmes = [];
@@ -703,18 +702,24 @@ const createAcademicStructure = async (database, superAdminIds) => {
 
   const cohortIdsByProgramme = new Map(programmes.map((programme) => [programme.id, []]));
   const offeringEntries = [];
-  for (const intake of intakes) {
+  for (const { intake, calendar } of intakes) {
     for (const programme of programmes) {
       const offering = await database.intakeProgramOffering.create({
-        data: { intakeId: intake.id, programmeId: programme.id, status: 'ACTIVE' },
+        data: {
+          intakeId: intake.id,
+          programmeId: programme.id,
+          academicStartDate: new Date(calendar.academicStart),
+          academicEndDate: toUtcDate(calendar.academicEnd),
+          status: 'ACTIVE',
+        },
       });
       const cohort = await database.cohort.create({
         data: {
           name: `GATE ${String(intake.gateNumber).padStart(2, '0')} · ${intake.season} 2027 · ${programme.title}`,
           programmeId: programme.id,
           intakeProgramOfferingId: offering.id,
-          startDate: intake.academicStartDate,
-          endDate: endOfUtcDate(intake.academicEndDate),
+          startDate: offering.academicStartDate,
+          endDate: endOfUtcDate(offering.academicEndDate),
           status: 'PLANNED',
         },
       });

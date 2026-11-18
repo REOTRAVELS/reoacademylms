@@ -22,13 +22,13 @@ const accessEnrollmentInclude = {
       programmeId: true,
       intakeId: true,
       programme: { select: { title: true } },
+      academicStartDate: true,
       intake: {
         select: {
           id: true,
           gateNumber: true,
           season: true,
           year: true,
-          academicStartDate: true,
           timezone: true,
         },
       },
@@ -42,7 +42,7 @@ export const getStudentIntakeAccess = async (studentId, now = new Date()) => {
     where: {
       ...baseWhere,
       programOffering: {
-        is: { intake: { is: { academicStartDate: { lte: now } } } },
+        is: { academicStartDate: { lte: now } },
       },
     },
     include: accessEnrollmentInclude,
@@ -54,11 +54,11 @@ export const getStudentIntakeAccess = async (studentId, now = new Date()) => {
     where: {
       ...baseWhere,
       programOffering: {
-        is: { intake: { is: { academicStartDate: { gt: now } } } },
+        is: { academicStartDate: { gt: now } },
       },
     },
     include: accessEnrollmentInclude,
-    orderBy: { programOffering: { intake: { academicStartDate: 'asc' } } },
+    orderBy: { programOffering: { academicStartDate: 'asc' } },
   });
   return waiting
     ? { state: 'WAITING', enrollment: waiting }

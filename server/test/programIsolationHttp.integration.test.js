@@ -25,13 +25,13 @@ const activeEnrollment = {
   programOffering: {
     programmeId: 'programme-a',
     intakeId: 'intake-a',
+    academicStartDate: new Date(Date.now() - 60_000),
     programme: { title: 'Program A' },
     intake: {
       id: 'intake-a',
       gateNumber: 1,
       season: 'WINTER',
       year: 2027,
-      academicStartDate: new Date(Date.now() - 60_000),
       timezone: 'UTC',
     },
   },

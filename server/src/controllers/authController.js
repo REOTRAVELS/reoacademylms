@@ -44,7 +44,7 @@ const accessForUser = async (user) => {
       gateNumber: access.enrollment.programOffering.intake.gateNumber,
       season: access.enrollment.programOffering.intake.season,
       year: access.enrollment.programOffering.intake.year,
-      academicStartDate: access.enrollment.programOffering.intake.academicStartDate,
+      academicStartDate: access.enrollment.programOffering.academicStartDate,
       timezone: access.enrollment.programOffering.intake.timezone,
       programmeTitle: access.enrollment.programOffering.programme.title,
     }

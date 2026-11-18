@@ -15,8 +15,6 @@ const sampleIntake = {
   gateNumber: 1,
   season: 'WINTER',
   year: 2027,
-  academicStartDate: '2027-01-15',
-  academicEndDate: '2027-03-31',
   timezone: 'UTC',
 };
 
@@ -53,7 +51,7 @@ const send = (server, path, { method = 'GET', body, user = admin } = {}) => fetc
 
 const authRestore = (user = admin) => stubMethod(prisma.user, 'findUnique', async () => user);
 
-test('intake creation rejects mismatched gate-season pairs and invalid calendar dates', async () => {
+test('intake creation rejects mismatched GATE metadata and legacy intake-level dates', async () => {
   let createCalled = false;
   const restores = [
     authRestore(),
@@ -72,19 +70,12 @@ test('intake creation rejects mismatched gate-season pairs and invalid calendar 
     assert.equal(mismatch.status, 400);
     assert.match((await mismatch.json()).message, /gate number does not match/i);
 
-    const invalidDate = await send(server, '/intakes', {
+    const intakeLevelDates = await send(server, '/intakes', {
       method: 'POST',
-      body: { ...sampleIntake, academicEndDate: '2027-02-30' },
+      body: { ...sampleIntake, academicStartDate: '2027-01-15', academicEndDate: '2027-03-31' },
     });
-    assert.equal(invalidDate.status, 400);
-    assert.match((await invalidDate.json()).message, /valid YYYY-MM-DD/i);
-
-    const wrongAcademyPeriod = await send(server, '/intakes', {
-      method: 'POST',
-      body: { ...sampleIntake, academicStartDate: '2027-04-15', academicEndDate: '2027-05-01' },
-    });
-    assert.equal(wrongAcademyPeriod.status, 400);
-    assert.match((await wrongAcademyPeriod.json()).message, /selected GATE period/i);
+    assert.equal(intakeLevelDates.status, 400);
+    assert.match((await intakeLevelDates.json()).message, /unsupported intake field/i);
     assert.equal(createCalled, false);
   } finally {
     if (server?.listening) await closeServer(server);
@@ -120,23 +111,22 @@ test('new intakes are open for registration by default without admission dates',
   }
 });
 
-test('intake start updates interpret local time in the selected timezone and audit the change', async () => {
-  const current = {
-    id: 'intake-1',
-    ...sampleIntake,
+test('program date updates interpret local time in the intake timezone and audit the change', async () => {
+  const offering = {
+    id: 'offering-1',
     academicStartDate: new Date('2027-01-15T00:00:00.000Z'),
     academicEndDate: new Date('2027-03-31T00:00:00.000Z'),
-    admissionsOpen: false,
-    status: 'UPCOMING',
+    intake: { status: 'UPCOMING', season: 'WINTER', year: 2027, timezone: 'America/New_York' },
+    programme: { status: 'ACTIVE' },
   };
   let updatedData;
   let auditMetadata;
   const restores = [
     authRestore(),
-    stubMethod(prisma.intake, 'findUnique', async () => current),
-    stubMethod(prisma.intake, 'update', async ({ data }) => {
+    stubMethod(prisma.intakeProgramOffering, 'findFirst', async () => offering),
+    stubMethod(prisma.intakeProgramOffering, 'update', async ({ data }) => {
       updatedData = data;
-      return { ...current, ...data };
+      return { ...offering, ...data };
     }),
     stubMethod(prisma.auditLog, 'create', async ({ data }) => {
       auditMetadata = data.metadata;
@@ -146,38 +136,38 @@ test('intake start updates interpret local time in the selected timezone and aud
   let server;
   try {
     server = await startServer();
-    const response = await send(server, '/intakes/intake-1', {
-      method: 'PUT',
-      body: { academicStartDate: '2027-01-15T09:30', timezone: 'America/New_York' },
+    const response = await send(server, '/intakes/intake-1/offerings/offering-1', {
+      method: 'PATCH',
+      body: { academicStartDate: '2027-01-15T09:30', academicEndDate: '2027-03-31' },
     });
     assert.equal(response.status, 200);
     assert.equal(updatedData.academicStartDate.toISOString(), '2027-01-15T14:30:00.000Z');
-    assert.equal(updatedData.timezone, 'America/New_York');
     assert.equal(auditMetadata.previousAcademicStartDate, '2027-01-15T00:00:00.000Z');
     assert.equal(auditMetadata.academicStartDate, '2027-01-15T14:30:00.000Z');
-    assert.equal(auditMetadata.timezone, 'America/New_York');
+    assert.equal(auditMetadata.academicEndDate, '2027-03-31');
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
   }
 });
 
-test('registration cannot be reopened after the academic start time', async () => {
+test('intake registration can be controlled independently of program start dates', async () => {
   const current = {
     id: 'intake-1',
     ...sampleIntake,
-    academicStartDate: new Date(Date.now() - 1_000),
     admissionsOpen: false,
     status: 'UPCOMING',
+    programOfferings: [],
   };
   let updateCalled = false;
   const restores = [
     authRestore(),
     stubMethod(prisma.intake, 'findUnique', async () => current),
-    stubMethod(prisma.intake, 'update', async () => {
+    stubMethod(prisma.intake, 'update', async ({ data }) => {
       updateCalled = true;
-      return current;
+      return { ...current, ...data };
     }),
+    stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
   ];
   let server;
   try {
@@ -186,40 +176,27 @@ test('registration cannot be reopened after the academic start time', async () =
       method: 'PUT',
       body: { admissionsOpen: true },
     });
-    assert.equal(response.status, 409);
-    assert.match((await response.json()).message, /automatically locked/i);
-    assert.equal(updateCalled, false);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).data.admissionsOpen, true);
+    assert.equal(updateCalled, true);
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
   }
 });
 
-test('admins can review the latest start-time audit history for an intake', async () => {
+test('admins can review academic date history for each program offering', async () => {
   const auditHistory = [
     {
       id: 'audit-1',
-      action: 'UPDATE_INTAKE',
+      entityId: 'offering-1',
+      action: 'UPDATE_INTAKE_PROGRAM_OFFERING',
       createdAt: new Date('2026-11-14T12:00:00.000Z'),
       metadata: {
         previousAcademicStartDate: '2027-01-15T00:00:00.000Z',
         academicStartDate: '2027-01-15T14:30:00.000Z',
-        previousTimezone: 'UTC',
-        timezone: 'America/New_York',
-        academicStartChanged: true,
-      },
-      actor: { firstName: 'Ada', lastName: 'Admin' },
-    },
-    {
-      id: 'audit-2',
-      action: 'UPDATE_INTAKE',
-      createdAt: new Date('2026-11-14T11:00:00.000Z'),
-      metadata: {
-        previousAcademicStartDate: '2027-01-15T14:30:00.000Z',
-        academicStartDate: '2027-01-15T14:30:00.000Z',
-        previousTimezone: 'America/New_York',
-        timezone: 'America/New_York',
-        academicStartChanged: false,
+        previousAcademicEndDate: '2027-03-31',
+        academicEndDate: '2027-03-31',
       },
       actor: { firstName: 'Ada', lastName: 'Admin' },
     },
@@ -229,13 +206,15 @@ test('admins can review the latest start-time audit history for an intake', asyn
     stubMethod(prisma.intake, 'findUnique', async () => ({
       id: 'intake-1',
       ...sampleIntake,
-      academicStartDate: new Date('2027-01-15T00:00:00.000Z'),
-      academicEndDate: new Date('2027-03-31T00:00:00.000Z'),
-      programOfferings: [],
+      programOfferings: [{ id: 'offering-1', academicStartDate: new Date('2027-01-15T00:00:00.000Z'), academicEndDate: new Date('2027-03-31T00:00:00.000Z') }],
     })),
     stubMethod(prisma.programEnrollment, 'findMany', async () => []),
     stubMethod(prisma.auditLog, 'findMany', async ({ where, take }) => {
-      assert.deepEqual(where, { entity: 'Intake', entityId: 'intake-1', action: 'UPDATE_INTAKE' });
+      assert.deepEqual(where, {
+        entity: 'IntakeProgramOffering',
+        entityId: { in: ['offering-1'] },
+        action: 'UPDATE_INTAKE_PROGRAM_OFFERING',
+      });
       assert.equal(take, 100);
       return auditHistory;
     }),
@@ -246,10 +225,9 @@ test('admins can review the latest start-time audit history for an intake', asyn
     const response = await send(server, '/intakes/intake-1');
     assert.equal(response.status, 200);
     const intake = (await response.json()).data;
-    assert.equal(intake.auditHistory.length, 1);
-    assert.equal(intake.auditHistory[0].actor, 'Ada Admin');
-    assert.equal(intake.auditHistory[0].metadata.previousTimezone, 'UTC');
-    assert.equal(intake.auditHistory[0].metadata.timezone, 'America/New_York');
+    assert.equal(intake.programOfferings[0].auditHistory.length, 1);
+    assert.equal(intake.programOfferings[0].auditHistory[0].actor, 'Ada Admin');
+    assert.equal(intake.programOfferings[0].auditHistory[0].metadata.previousAcademicEndDate, '2027-03-31');
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
@@ -289,7 +267,13 @@ test('admins can add multiple programs atomically and duplicate offerings are re
   let savedRows;
   const restores = [
     authRestore(),
-    stubMethod(prisma.intake, 'findUnique', async () => ({ id: 'intake-1', status: 'UPCOMING' })),
+    stubMethod(prisma.intake, 'findUnique', async () => ({
+      id: 'intake-1',
+      status: 'UPCOMING',
+      season: 'WINTER',
+      year: 2027,
+      timezone: 'UTC',
+    })),
     stubMethod(prisma.programme, 'findMany', async ({ where }) =>
       [{ id: 'programme-1' }, { id: 'programme-2' }].filter(({ id }) => where.id.in.includes(id))),
     stubMethod(prisma.intakeProgramOffering, 'findMany', async () => existingOfferings),
@@ -318,15 +302,26 @@ test('admins can add multiple programs atomically and duplicate offerings are re
     server = await startServer();
     const added = await send(server, '/intakes/intake-1/offerings', {
       method: 'POST',
-      body: { programmeIds: ['programme-1', 'programme-2'] },
+      body: {
+        offerings: [
+          { programmeId: 'programme-1', academicStartDate: '2027-01-15T09:00', academicEndDate: '2027-03-31' },
+          { programmeId: 'programme-2', academicStartDate: '2027-02-01T10:00', academicEndDate: '2027-03-30' },
+        ],
+      },
     });
     assert.equal(added.status, 201);
     assert.equal((await added.json()).data.length, 2);
     assert.deepEqual(savedRows.map(({ status }) => status), ['ACTIVE', 'ACTIVE']);
+    assert.deepEqual(savedRows.map(({ academicStartDate }) => academicStartDate.toISOString()), [
+      '2027-01-15T09:00:00.000Z',
+      '2027-02-01T10:00:00.000Z',
+    ]);
 
     const duplicate = await send(server, '/intakes/intake-1/offerings', {
       method: 'POST',
-      body: { programmeIds: ['programme-1'] },
+      body: {
+        offerings: [{ programmeId: 'programme-1', academicStartDate: '2027-01-15T09:00', academicEndDate: '2027-03-31' }],
+      },
     });
     assert.equal(duplicate.status, 409);
     assert.equal(createManyCount, 1);
@@ -340,10 +335,9 @@ test('offering removal is blocked by cohort, application, or enrollment history'
   const current = {
     id: 'intake-1',
     ...sampleIntake,
-    academicStartDate: new Date(`${sampleIntake.academicStartDate}T00:00:00.000Z`),
-    academicEndDate: new Date(`${sampleIntake.academicEndDate}T00:00:00.000Z`),
     admissionsOpen: true,
     status: 'ACTIVE',
+    programOfferings: [],
   };
   let updatedData;
   let deleteCalled = false;
@@ -422,10 +416,10 @@ test('intake list and detail reads return their persisted records', async () => 
 test('intake list reports distinct approved, waiting, and eligible student counts', async () => {
   const now = new Date();
   const intakes = [
-    { id: 'future-intake', academicStartDate: new Date(now.getTime() + 60_000), programOfferings: [] },
-    { id: 'started-intake', academicStartDate: new Date(now.getTime() - 60_000), programOfferings: [] },
+    { id: 'future-intake', programOfferings: [] },
+    { id: 'started-intake', programOfferings: [] },
   ];
-  const activeEnrollment = (intakeId, studentId) => ({
+  const activeEnrollment = (intakeId, studentId, academicStartDate) => ({
     intakeId,
     studentId,
     status: 'ACTIVE',
@@ -433,15 +427,16 @@ test('intake list reports distinct approved, waiting, and eligible student count
     endedAt: null,
     application: { status: 'APPROVED' },
     student: { status: 'ACTIVE' },
+    programOffering: { academicStartDate },
   });
   const restores = [
     authRestore(),
     stubMethod(prisma.intake, 'findMany', async () => intakes),
     stubMethod(prisma.programEnrollment, 'findMany', async () => [
-      activeEnrollment('future-intake', 'student-1'),
-      activeEnrollment('future-intake', 'student-1'),
-      activeEnrollment('future-intake', 'student-2'),
-      activeEnrollment('started-intake', 'student-3'),
+      activeEnrollment('future-intake', 'student-1', new Date(now.getTime() + 60_000)),
+      activeEnrollment('future-intake', 'student-1', new Date(now.getTime() + 60_000)),
+      activeEnrollment('future-intake', 'student-2', new Date(now.getTime() + 60_000)),
+      activeEnrollment('started-intake', 'student-3', new Date(now.getTime() - 60_000)),
     ]),
   ];
   let server;

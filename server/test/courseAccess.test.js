@@ -23,7 +23,7 @@ test('student course access is scoped to an active Program and availability date
   );
   const cohortOffering = where.AND[0].OR[1].cohorts.some.cohort.intakeProgramOffering.is;
   assert.deepEqual(cohortOffering.programEnrollments.some, enrollmentWhere);
-  assert.deepEqual(cohortOffering.intake, { is: { academicStartDate: { lte: now } } });
+  assert.deepEqual(cohortOffering.academicStartDate, { lte: now });
   assert.equal(enrollmentWhere.studentId, 'student-1');
   assert.equal(enrollmentWhere.status, 'ACTIVE');
   assert.deepEqual(enrollmentWhere.effectiveAt, { lte: now });
@@ -32,8 +32,11 @@ test('student course access is scoped to an active Program and availability date
     { OR: [{ applicationId: null }, { application: { is: { status: 'APPROVED' } } }] },
   ]);
   assert.deepEqual(
-    where.AND[0].OR[0].programme.is.intakeOfferings.some.intake,
-    { is: { academicStartDate: { lte: now } } },
+    where.AND[0].OR[0].programme.is.intakeOfferings.some,
+    {
+      academicStartDate: { lte: now },
+      programEnrollments: { some: enrollmentWhere },
+    },
   );
   assert.deepEqual(where.AND[0].OR[1].cohorts.some.cohort.enrolments.some, {
     studentId: 'student-1',

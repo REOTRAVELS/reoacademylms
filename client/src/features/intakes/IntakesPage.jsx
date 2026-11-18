@@ -6,8 +6,7 @@ import { Input, Select } from '../../components/forms/Input';
 import DataTable from '../../components/tables/DataTable';
 import { statusClass, statusLabel } from '../../components/common/navConfig';
 import { intakesAPI } from '../../services/api';
-import { validateIntakePeriod } from './intakeValidation';
-import { formatIntakeDate, formatIntakeStart } from './intakeDateTime';
+import { formatIntakeStart } from './intakeDateTime';
 
 const seasonsByGate = { 1: 'WINTER', 2: 'SPRING', 3: 'SUMMER', 4: 'FALL' };
 const gatesBySeason = Object.fromEntries(Object.entries(seasonsByGate).map(([gate, season]) => [season, gate]));
@@ -25,8 +24,6 @@ const emptyForm = () => {
     gateNumber: 1,
     season: 'WINTER',
     year: now.getFullYear() + (now.getMonth() >= 3 ? 1 : 0),
-    academicStartDate: '',
-    academicEndDate: '',
     timezone: 'UTC',
     status: 'UPCOMING',
   };
@@ -59,11 +56,6 @@ export default function IntakesPage() {
     event.preventDefault();
     setError('');
     setNotice('');
-    const periodError = validateIntakePeriod(form);
-    if (periodError) {
-      setError(periodError);
-      return;
-    }
     try {
       await intakesAPI.create({ ...form, gateNumber: Number(form.gateNumber), year: Number(form.year) });
       setForm(emptyForm());
@@ -78,13 +70,23 @@ export default function IntakesPage() {
   const columns = [
     { key: 'gateNumber', label: 'Gate', render: (intake) => `GATE ${String(intake.gateNumber).padStart(2, '0')}` },
     { key: 'season', label: 'Season', render: (intake) => `${seasonLabels[intake.season]} ${intake.year}` },
-    { key: 'academicStartDate', label: 'Academic dates', render: (intake) => `${formatIntakeStart(intake.academicStartDate, intake.timezone)} – ${formatIntakeDate(intake.academicEndDate)}` },
+    {
+      key: 'nextProgramStart',
+      label: 'Next program start',
+      render: (intake) => {
+        const nextStart = (intake.programOfferings || [])
+          .filter((offering) => offering.status === 'ACTIVE' && new Date(offering.academicStartDate) > new Date())
+          .sort((left, right) => new Date(left.academicStartDate) - new Date(right.academicStartDate))[0];
+        return nextStart
+          ? formatIntakeStart(nextStart.academicStartDate, intake.timezone)
+          : '—';
+      },
+    },
     {
       key: 'admissionsOpen',
       label: 'Registration',
       render: (intake) => {
-        const started = new Date(intake.academicStartDate).getTime() <= Date.now();
-        if (started) return 'Locked · intake started';
+        if (intake.status === 'COMPLETED' || intake.status === 'ARCHIVED') return 'Locked';
         return intake.admissionsOpen ? 'Open' : 'Locked';
       },
     },
@@ -102,7 +104,7 @@ export default function IntakesPage() {
         <div>
           <span className="eyebrow">Admissions and planning</span>
           <h1>Intakes</h1>
-          <p>Create an intake with its academic dates. Registration opens automatically and closes when the intake starts.</p>
+          <p>Create an intake, then assign each program its own academic dates.</p>
         </div>
         <Button onClick={() => setShowForm((visible) => !visible)}>
           <CalendarRange size={16} /> {showForm ? 'Cancel' : 'New intake'}
@@ -116,7 +118,7 @@ export default function IntakesPage() {
         <section className="card">
           <div className="card-heading"><div><span className="eyebrow">Intake setup</span><h2>Create intake</h2></div></div>
           <form onSubmit={handleSubmit} className="intake-form">
-            <p className="intake-period-hint">Set the academic start and end. Students can apply at any time before the start; you can also lock registration early.</p>
+            <p className="intake-period-hint">Program academic dates are set individually after the intake is created.</p>
             <div className="intake-form-grid">
               <Select
                 label="Gate"
@@ -134,8 +136,6 @@ export default function IntakesPage() {
               />
               <Input label="Year" type="number" min="2000" max="9999" value={form.year} onChange={(value) => setForm((current) => ({ ...current, year: value }))} required />
               <Input label="Timezone (IANA)" placeholder="UTC or Africa/Lagos" value={form.timezone} onChange={(value) => setForm((current) => ({ ...current, timezone: value }))} required />
-              <Input label={`Academic start (${form.timezone || 'UTC'})`} type="datetime-local" value={form.academicStartDate} onChange={(value) => setForm((current) => ({ ...current, academicStartDate: value }))} required />
-              <Input label="Academic end" type="date" value={form.academicEndDate} onChange={(value) => setForm((current) => ({ ...current, academicEndDate: value }))} required />
               <Select label="Status" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={intakeStatuses} required />
             </div>
             <div className="intake-form-actions"><Button type="submit">Create intake</Button></div>

@@ -26,13 +26,13 @@ const waitingEnrollment = {
   programOffering: {
     programmeId: 'programme-1',
     intakeId: 'intake-1',
+    academicStartDate: startDate,
     programme: { title: 'Travel Operations' },
     intake: {
       id: 'intake-1',
       gateNumber: 1,
       season: 'WINTER',
       year: 2027,
-      academicStartDate: startDate,
       timezone: 'UTC',
     },
   },
@@ -67,10 +67,10 @@ test('future-Intake students receive only a waiting dashboard and are blocked fr
   const restores = [
     stubMethod(prisma.user, 'findUnique', async () => student),
     stubMethod(prisma.programEnrollment, 'findFirst', async ({ where }) => {
-      const startFilter = where.programOffering?.is?.intake?.is?.academicStartDate;
-      const intakeStart = waitingEnrollment.programOffering.intake.academicStartDate;
-      if (startFilter?.gt && intakeStart > startFilter.gt) return waitingEnrollment;
-      if (startFilter?.lte && intakeStart <= startFilter.lte) return waitingEnrollment;
+      const startFilter = where.programOffering?.is?.academicStartDate;
+      const offeringStart = waitingEnrollment.programOffering.academicStartDate;
+      if (startFilter?.gt && offeringStart > startFilter.gt) return waitingEnrollment;
+      if (startFilter?.lte && offeringStart <= startFilter.lte) return waitingEnrollment;
       return null;
     }),
     stubMethod(prisma.enrolment, 'findMany', async () => {
@@ -108,7 +108,7 @@ test('future-Intake students receive only a waiting dashboard and are blocked fr
     assert.equal(academicDashboardQueries, 0);
     assert.equal(courseQueries, 0);
 
-    waitingEnrollment.programOffering.intake.academicStartDate = new Date(Date.now() - 1_000);
+    waitingEnrollment.programOffering.academicStartDate = new Date(Date.now() - 1_000);
     const startedCourseResponse = await send(server, '/courses');
     assert.equal(startedCourseResponse.status, 200);
     assert.equal(courseQueries, 1);

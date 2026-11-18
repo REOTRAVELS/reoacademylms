@@ -303,10 +303,10 @@ export const intakesAPI = {
   get: async (id) => api.get(`/intakes/${id}`),
   create: async (form) => api.post('/intakes/', form),
   update: async (id, form) => api.put(`/intakes/${id}`, form),
-  addOfferings: async (id, programmeIds, status) =>
-    api.post(`/intakes/${id}/offerings`, { programmeIds, status }),
-  updateOffering: async (id, offeringId, status) =>
-    api.patch(`/intakes/${id}/offerings/${offeringId}`, { status }),
+  addOfferings: async (id, offerings, status) =>
+    api.post(`/intakes/${id}/offerings`, { offerings, status }),
+  updateOffering: async (id, offeringId, updates) =>
+    api.patch(`/intakes/${id}/offerings/${offeringId}`, updates),
   removeOffering: async (id, offeringId) =>
     api.delete(`/intakes/${id}/offerings/${offeringId}`),
 };

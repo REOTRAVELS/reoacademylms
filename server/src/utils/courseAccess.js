@@ -4,14 +4,14 @@ import { activeProgramEnrollmentWhere } from './intakeAccess.js';
 export const activeProgramForStudent = (studentId, now = new Date()) => ({
   intakeOfferings: {
     some: {
-      intake: { is: { academicStartDate: { lte: now } } },
+      academicStartDate: { lte: now },
       programEnrollments: { some: activeProgramEnrollmentWhere(studentId, now) },
     },
   },
 });
 
 export const activeProgramOfferingForStudent = (studentId, now = new Date()) => ({
-  intake: { is: { academicStartDate: { lte: now } } },
+  academicStartDate: { lte: now },
   programEnrollments: { some: activeProgramEnrollmentWhere(studentId, now) },
 });
 

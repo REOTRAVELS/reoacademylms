@@ -224,7 +224,7 @@ test('student dashboard only selects fields used by its learning overview', asyn
       dashboardCourseWhere.AND[0].OR[0].programme.is.intakeOfferings.some.programEnrollments.some,
     );
     assert.ok(
-      dashboardCourseWhere.AND[0].OR[0].programme.is.intakeOfferings.some.intake.is.academicStartDate.lte
+      dashboardCourseWhere.AND[0].OR[0].programme.is.intakeOfferings.some.academicStartDate.lte
         instanceof Date,
     );
     assertActiveEnrollmentScope(
@@ -281,7 +281,7 @@ test('student dashboard only selects fields used by its learning overview', asyn
       liveClassQuery.where.cohort.intakeProgramOffering.is.programEnrollments.some,
     );
     assert.ok(
-      liveClassQuery.where.cohort.intakeProgramOffering.is.intake.is.academicStartDate.lte
+      liveClassQuery.where.cohort.intakeProgramOffering.is.academicStartDate.lte
         instanceof Date,
     );
     assert.deepEqual(liveClassQuery.where.cohort.enrolments.some, { studentId: 'student-1' });

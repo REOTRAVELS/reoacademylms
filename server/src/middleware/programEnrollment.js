@@ -14,13 +14,13 @@ const setEnrollmentContext = (req, enrollment) => {
 const waitingResponse = (res, enrollment, now) => res.status(403).json({
   success: false,
   code: 'ACADEMIC_ACCESS_NOT_STARTED',
-  message: 'Academic access will be available when your assigned Intake starts.',
+  message: 'Academic access will be available when your Program starts.',
   intake: {
     id: enrollment.programOffering.intake.id,
     gateNumber: enrollment.programOffering.intake.gateNumber,
     season: enrollment.programOffering.intake.season,
     year: enrollment.programOffering.intake.year,
-    academicStartDate: enrollment.programOffering.intake.academicStartDate,
+    academicStartDate: enrollment.programOffering.academicStartDate,
     timezone: enrollment.programOffering.intake.timezone,
     programmeTitle: enrollment.programOffering.programme.title,
   },

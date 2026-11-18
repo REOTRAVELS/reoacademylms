@@ -19,16 +19,57 @@ const monthsBySeason = {
 
 const intakeStatuses = new Set(['UPCOMING', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
 const intakeSeasons = new Set(Object.values(seasonsByGate));
-const dateFields = [
-  'academicStartDate',
-  'academicEndDate',
-];
-const dateOnlyFields = ['academicEndDate'];
 
 const parseDateOnly = (value) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : new Date(`${value.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  }
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
+};
+
+export const validateOfferingAcademicPeriod = (input, intake) => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { error: 'Program academic dates are required.' };
+  }
+  for (const field of ['academicStartDate', 'academicEndDate']) {
+    if (input[field] === undefined) return { error: `${field} is required.` };
+  }
+
+  const timeZone = intake.timezone || 'UTC';
+  const academicEndDate = parseDateOnly(input.academicEndDate);
+  if (!academicEndDate) return { error: 'academicEndDate must be a valid YYYY-MM-DD date.' };
+
+  let academicStartDate;
+  if (input.academicStartDate instanceof Date) {
+    academicStartDate = input.academicStartDate;
+    if (Number.isNaN(academicStartDate.getTime())) {
+      return { error: 'Academic start must be a valid local date and time in the selected timezone.' };
+    }
+  } else {
+    const parsedStart = parseIntakeStartDateTime(input.academicStartDate, timeZone);
+    if (parsedStart.error === 'ambiguous') {
+      return { error: 'Academic start is ambiguous in this timezone; choose a different local time.' };
+    }
+    if (!parsedStart.date) {
+      return { error: 'Academic start must be a valid local date and time in the selected timezone.' };
+    }
+    academicStartDate = parsedStart.date;
+  }
+
+  const startLocalDate = localDateInTimezone(academicStartDate, timeZone);
+  const endLocalDate = academicEndDate.toISOString().slice(0, 10);
+  if (startLocalDate >= endLocalDate) {
+    return { error: 'Academic end date must be after the academic start date.' };
+  }
+  for (const localDate of [startLocalDate, endLocalDate]) {
+    const [year, month] = localDate.split('-').map(Number);
+    if (year !== intake.year || !monthsBySeason[intake.season]?.includes(month)) {
+      return { error: 'Academic dates fall outside the selected GATE period.' };
+    }
+  }
+  return { data: { academicStartDate, academicEndDate } };
 };
 
 export const validateIntake = (input) => {
@@ -40,7 +81,6 @@ export const validateIntake = (input) => {
     'gateNumber',
     'season',
     'year',
-    ...dateFields,
     'timezone',
     'admissionsOpen',
     'status',
@@ -50,7 +90,7 @@ export const validateIntake = (input) => {
   }
 
   const data = { ...input };
-  for (const field of ['gateNumber', 'season', 'year', ...dateFields]) {
+  for (const field of ['gateNumber', 'season', 'year']) {
     if (data[field] === undefined) return { error: `${field} is required.` };
   }
 
@@ -81,38 +121,6 @@ export const validateIntake = (input) => {
     }
     data.timezone = data.timezone.trim();
   }
-  const timeZone = data.timezone || 'UTC';
-
-  for (const field of dateOnlyFields) {
-    const parsedDate = parseDateOnly(data[field]);
-    if (!parsedDate) return { error: `${field} must be a valid YYYY-MM-DD date.` };
-    data[field] = parsedDate;
-  }
-  const parsedStart = parseIntakeStartDateTime(data.academicStartDate, timeZone);
-  if (parsedStart.error === 'ambiguous') {
-    return { error: 'Academic start is ambiguous in this timezone; choose a different local time.' };
-  }
-  if (!parsedStart.date) {
-    return { error: 'Academic start must be a valid local date and time in the selected timezone.' };
-  }
-  data.academicStartDate = parsedStart.date;
-
-  const academicStartLocalDate = localDateInTimezone(data.academicStartDate, timeZone);
-  const academicEndDate = data.academicEndDate.toISOString().slice(0, 10);
-  if (academicStartLocalDate >= academicEndDate) {
-    return { error: 'Academic end date must be after the academic start date.' };
-  }
-  if (data.season && data.year) {
-    for (const field of dateFields) {
-      const localDate = field === 'academicStartDate'
-        ? academicStartLocalDate
-        : data[field].toISOString().slice(0, 10);
-      const [year, month] = localDate.split('-').map(Number);
-      if (year !== data.year || !monthsBySeason[data.season].includes(month)) {
-        return { error: `${field} falls outside the selected GATE period.` };
-      }
-    }
-  }
   if (data.admissionsOpen !== undefined && typeof data.admissionsOpen !== 'boolean') {
     return { error: 'Admissions open must be true or false.' };
   }
@@ -125,5 +133,3 @@ export const validateIntake = (input) => {
 
   return { data };
 };
-
-export const intakeDateFields = dateFields;

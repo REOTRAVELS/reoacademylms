@@ -1,7 +1,7 @@
 import prisma from '../config/database.js';
 import { ok, fail } from '../utils/response.js';
 import { audit } from '../utils/audit.js';
-import { intakeDateFields, validateIntake } from '../validators/intake.js';
+import { validateIntake, validateOfferingAcademicPeriod } from '../validators/intake.js';
 import { revalidateLiveClassAccess } from '../services/liveClassRealtime.js';
 
 const isPrismaError = (error, code) => error && typeof error === 'object' && error.code === code;
@@ -54,6 +54,7 @@ const withStudentCounts = async (intakes, now = new Date()) => {
       endedAt: true,
       application: { select: { status: true } },
       student: { select: { status: true } },
+      programOffering: { select: { academicStartDate: true } },
     },
   });
   const countsByIntake = new Map(intakes.map(({ id }) => [id, {
@@ -67,7 +68,7 @@ const withStudentCounts = async (intakes, now = new Date()) => {
     const intake = intakeById.get(enrollment.intakeId);
     if (!counts || !intake) continue;
     counts.approved.add(enrollment.studentId);
-    counts[intake.academicStartDate > now ? 'waiting' : 'eligible'].add(enrollment.studentId);
+    counts[enrollment.programOffering.academicStartDate > now ? 'waiting' : 'eligible'].add(enrollment.studentId);
   }
   return intakes.map((intake) => {
     const counts = countsByIntake.get(intake.id);
@@ -98,32 +99,41 @@ export const getIntake = async (req, res) => {
   if (!intake) return fail(res, 'Intake not found.', 404);
   const [withCounts, auditEntries] = await Promise.all([
     withStudentCounts([intake]),
-    prisma.auditLog.findMany({
-      where: { entity: 'Intake', entityId: intake.id, action: 'UPDATE_INTAKE' },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      select: {
-        id: true,
-        action: true,
-        metadata: true,
-        createdAt: true,
-        actor: { select: { firstName: true, lastName: true } },
-      },
-    }),
+    intake.programOfferings.length
+      ? prisma.auditLog.findMany({
+        where: {
+          entity: 'IntakeProgramOffering',
+          entityId: { in: intake.programOfferings.map(({ id }) => id) },
+          action: 'UPDATE_INTAKE_PROGRAM_OFFERING',
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          entityId: true,
+          action: true,
+          metadata: true,
+          createdAt: true,
+          actor: { select: { firstName: true, lastName: true } },
+        },
+      })
+      : Promise.resolve([]),
   ]);
-  const auditHistory = auditEntries
-    .filter(({ metadata }) => {
-      if (typeof metadata?.academicStartChanged === 'boolean') return metadata.academicStartChanged;
-      return metadata?.previousAcademicStartDate !== metadata?.academicStartDate
-        || metadata?.previousTimezone !== metadata?.timezone;
-    })
-    .slice(0, 20);
-  return ok(res, {
-    ...withCounts[0],
-    auditHistory: auditHistory.map((entry) => ({
+  const histories = new Map(intake.programOfferings.map(({ id }) => [id, []]));
+  for (const entry of auditEntries) {
+    if (!histories.has(entry.entityId)) continue;
+    histories.get(entry.entityId).push({
       ...entry,
       actor: entry.actor ? `${entry.actor.firstName} ${entry.actor.lastName}` : 'System',
-    })),
+    });
+  }
+  const programOfferings = withCounts[0].programOfferings.map((offering) => ({
+    ...offering,
+    auditHistory: histories.get(offering.id).slice(0, 20),
+  }));
+  return ok(res, {
+    ...withCounts[0],
+    programOfferings,
   });
 };
 
@@ -156,11 +166,11 @@ export const createIntake = async (req, res) => {
 };
 
 export const updateIntake = async (req, res) => {
-  const current = await prisma.intake.findUnique({ where: { id: req.params.id } });
+  const current = await prisma.intake.findUnique({
+    where: { id: req.params.id },
+    include: { programOfferings: { select: { id: true, academicStartDate: true, academicEndDate: true } } },
+  });
   if (!current) return fail(res, 'Intake not found.', 404);
-  if (req.body?.admissionsOpen === true && current.academicStartDate <= new Date()) {
-    return fail(res, 'Registration is automatically locked after the intake start time.', 409);
-  }
 
   const currentInput = {
     gateNumber: current.gateNumber,
@@ -170,11 +180,6 @@ export const updateIntake = async (req, res) => {
     admissionsOpen: current.admissionsOpen,
     status: current.status,
   };
-  for (const field of intakeDateFields) {
-    currentInput[field] = field === 'academicStartDate'
-      ? current[field].toISOString()
-      : asDateInput(current[field]);
-  }
   const merged = { ...currentInput, ...req.body };
   if ((req.body?.status === 'ARCHIVED' || req.body?.status === 'COMPLETED') &&
       req.body?.admissionsOpen === undefined) {
@@ -182,8 +187,16 @@ export const updateIntake = async (req, res) => {
   }
   const result = validateIntake(merged);
   if (result.error) return fail(res, result.error, 400);
-  const academicStartChanged = current.academicStartDate.getTime() !== result.data.academicStartDate.getTime()
-    || current.timezone !== result.data.timezone;
+  for (const offering of current.programOfferings) {
+    const dates = validateOfferingAcademicPeriod(offering, result.data);
+    if (dates.error) {
+      return fail(
+        res,
+        'The intake GATE, season, year, or timezone change would put existing program dates outside the intake period.',
+        409,
+      );
+    }
+  }
 
   try {
     const intake = await prisma.intake.update({
@@ -195,13 +208,6 @@ export const updateIntake = async (req, res) => {
       action: 'UPDATE_INTAKE',
       entity: 'Intake',
       entityId: intake.id,
-      metadata: {
-        previousAcademicStartDate: current.academicStartDate.toISOString(),
-        academicStartDate: intake.academicStartDate.toISOString(),
-        previousTimezone: current.timezone,
-        timezone: intake.timezone,
-        academicStartChanged,
-      },
       ipAddress: req.ip,
     });
     await revalidateLiveClassAccess();
@@ -213,10 +219,17 @@ export const updateIntake = async (req, res) => {
 };
 
 export const addIntakeOfferings = async (req, res) => {
-  const { programmeIds, status = 'ACTIVE' } = req.body || {};
-  if (!Array.isArray(programmeIds) || programmeIds.length === 0 ||
-      programmeIds.some((id) => typeof id !== 'string' || id.trim() === '') ||
-      new Set(programmeIds).size !== programmeIds.length) {
+  const { offerings: requestedOfferings, status = 'ACTIVE' } = req.body || {};
+  if (!Array.isArray(requestedOfferings) || requestedOfferings.length === 0 ||
+      requestedOfferings.some((offering) => (
+        !offering
+        || typeof offering.programmeId !== 'string'
+        || offering.programmeId.trim() === ''
+      ))) {
+    return fail(res, 'Choose one or more programs and set their academic dates.', 400);
+  }
+  const programmeIds = requestedOfferings.map(({ programmeId }) => programmeId);
+  if (new Set(programmeIds).size !== programmeIds.length) {
     return fail(res, 'Choose one or more distinct programmes.', 400);
   }
   if (!['ACTIVE', 'INACTIVE'].includes(status)) {
@@ -225,11 +238,21 @@ export const addIntakeOfferings = async (req, res) => {
 
   const intake = await prisma.intake.findUnique({
     where: { id: req.params.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, gateNumber: true, season: true, year: true, timezone: true },
   });
   if (!intake) return fail(res, 'Intake not found.', 404);
   if (intake.status === 'ARCHIVED' || intake.status === 'COMPLETED') {
     return fail(res, 'Offerings cannot be added to a completed or archived intake.', 409);
+  }
+  const offeringData = [];
+  for (const requestedOffering of requestedOfferings) {
+    const dates = validateOfferingAcademicPeriod(requestedOffering, intake);
+    if (dates.error) return fail(res, dates.error, 400);
+    offeringData.push({
+      programmeId: requestedOffering.programmeId,
+      ...dates.data,
+      status,
+    });
   }
   const programmes = await prisma.programme.findMany({
     where: { id: { in: programmeIds }, status: { not: 'ARCHIVED' } },
@@ -246,12 +269,11 @@ export const addIntakeOfferings = async (req, res) => {
   if (existing.length) return fail(res, 'One or more programmes are already offered in this intake.', 409);
 
   try {
-    const offerings = await prisma.$transaction(async (transaction) => {
+    const createdOfferings = await prisma.$transaction(async (transaction) => {
       await transaction.intakeProgramOffering.createMany({
-        data: programmeIds.map((programmeId) => ({
+        data: offeringData.map((offering) => ({
           intakeId: intake.id,
-          programmeId,
-          status,
+          ...offering,
         })),
       });
       return transaction.intakeProgramOffering.findMany({
@@ -265,10 +287,14 @@ export const addIntakeOfferings = async (req, res) => {
       action: 'ADD_INTAKE_PROGRAM_OFFERINGS',
       entity: 'Intake',
       entityId: intake.id,
-      metadata: { programmeIds, status },
+      metadata: { offerings: offeringData.map(({ programmeId, academicStartDate, academicEndDate }) => ({
+        programmeId,
+        academicStartDate: academicStartDate.toISOString(),
+        academicEndDate: asDateInput(academicEndDate),
+      })), status },
       ipAddress: req.ip,
     });
-    return ok(res, offerings, 'Program offerings added.', 201);
+    return ok(res, createdOfferings, 'Program offerings added.', 201);
   } catch (error) {
     if (isPrismaError(error, 'P2002')) return fail(res, 'One or more programmes are already offered in this intake.', 409);
     throw error;
@@ -277,13 +303,17 @@ export const addIntakeOfferings = async (req, res) => {
 
 export const updateIntakeOffering = async (req, res) => {
   const { status } = req.body || {};
-  if (!['ACTIVE', 'INACTIVE'].includes(status)) {
+  if (status !== undefined && !['ACTIVE', 'INACTIVE'].includes(status)) {
     return fail(res, 'Offering status must be Active or Inactive.', 400);
+  }
+  if (!req.body || Object.keys(req.body).some((field) => !['status', 'academicStartDate', 'academicEndDate'].includes(field))
+    || Object.keys(req.body).length === 0) {
+    return fail(res, 'Provide offering status or academic dates to update.', 400);
   }
   const offering = await prisma.intakeProgramOffering.findFirst({
     where: { id: req.params.offeringId, intakeId: req.params.id },
     include: {
-      intake: { select: { status: true } },
+      intake: { select: { status: true, season: true, year: true, timezone: true } },
       programme: { select: { status: true } },
     },
   });
@@ -294,9 +324,26 @@ export const updateIntakeOffering = async (req, res) => {
     return fail(res, 'A completed or archived intake or programme cannot have an active offering.', 409);
   }
 
+  let dateData = {};
+  if (req.body.academicStartDate !== undefined || req.body.academicEndDate !== undefined) {
+    const dates = validateOfferingAcademicPeriod({
+      academicStartDate: req.body.academicStartDate ?? offering.academicStartDate,
+      academicEndDate: req.body.academicEndDate ?? offering.academicEndDate,
+    }, offering.intake);
+    if (dates.error) return fail(res, dates.error, 400);
+    dateData = dates.data;
+  }
+  const metadata = { intakeId: req.params.id };
+  if (status !== undefined) metadata.status = status;
+  if (Object.keys(dateData).length) {
+    metadata.previousAcademicStartDate = offering.academicStartDate.toISOString();
+    metadata.academicStartDate = dateData.academicStartDate.toISOString();
+    metadata.previousAcademicEndDate = asDateInput(offering.academicEndDate);
+    metadata.academicEndDate = asDateInput(dateData.academicEndDate);
+  }
   const updated = await prisma.intakeProgramOffering.update({
     where: { id: offering.id },
-    data: { status },
+    data: { ...dateData, ...(status !== undefined ? { status } : {}) },
     include: { programme: true, _count: { select: { cohorts: true, applications: true, programEnrollments: true, assessments: true } } },
   });
   await audit({
@@ -304,7 +351,7 @@ export const updateIntakeOffering = async (req, res) => {
     action: 'UPDATE_INTAKE_PROGRAM_OFFERING',
     entity: 'IntakeProgramOffering',
     entityId: updated.id,
-    metadata: { intakeId: req.params.id, status },
+    metadata,
     ipAddress: req.ip,
   });
   await revalidateLiveClassAccess();

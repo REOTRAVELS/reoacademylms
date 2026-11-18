@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarRange, Plus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input, Select } from '../../components/forms/Input';
 import { statusClass, statusLabel } from '../../components/common/navConfig';
@@ -22,8 +22,6 @@ const toEditForm = (intake) => ({
   season: intake.season,
   year: intake.year,
   timezone: intake.timezone,
-  academicStartDate: toDateTimeLocal(intake.academicStartDate, intake.timezone),
-  academicEndDate: String(intake.academicEndDate).slice(0, 10),
 });
 
 export default function IntakeDetailPage() {
@@ -32,8 +30,14 @@ export default function IntakeDetailPage() {
   const [editForm, setEditForm] = useState(null);
   const [editing, setEditing] = useState(false);
   const [programmes, setProgrammes] = useState([]);
-  const [selectedProgrammeIds, setSelectedProgrammeIds] = useState([]);
+  const [offeringForm, setOfferingForm] = useState({
+    programmeId: '',
+    academicStartDate: '',
+    academicEndDate: '',
+  });
   const [offeringStatus, setOfferingStatus] = useState('ACTIVE');
+  const [editingOfferingId, setEditingOfferingId] = useState(null);
+  const [offeringEditForm, setOfferingEditForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -66,6 +70,7 @@ export default function IntakeDetailPage() {
   const availableProgrammes = programmes.filter(
     (programme) => programme.status !== 'ARCHIVED' && !existingProgrammeIds.has(programme.id),
   );
+  const admissionsUnavailable = intake?.status === 'ARCHIVED' || intake?.status === 'COMPLETED';
 
   const runAction = async (action, successMessage) => {
     setError('');
@@ -93,21 +98,31 @@ export default function IntakeDetailPage() {
 
   const addProgrammes = async (event) => {
     event.preventDefault();
-    if (!selectedProgrammeIds.length) return;
-    const added = await runAction(
-      () => intakesAPI.addOfferings(id, selectedProgrammeIds, offeringStatus),
-      'Program offerings added.',
-    );
-    if (added) setSelectedProgrammeIds([]);
-  };
-
-  const updateDetails = async (event) => {
-    event.preventDefault();
-    const periodError = validateIntakePeriod(editForm);
+    if (!offeringForm.programmeId) return;
+    const periodError = validateIntakePeriod({
+      ...offeringForm,
+      season: intake.season,
+      year: intake.year,
+    });
     if (periodError) {
       setError(periodError);
       return;
     }
+    const added = await runAction(
+      () => intakesAPI.addOfferings(id, [{
+        programmeId: offeringForm.programmeId,
+        academicStartDate: offeringForm.academicStartDate,
+        academicEndDate: offeringForm.academicEndDate,
+      }], offeringStatus),
+      'Program offering added.',
+    );
+    if (added) {
+      setOfferingForm({ programmeId: '', academicStartDate: '', academicEndDate: '' });
+    }
+  };
+
+  const updateDetails = async (event) => {
+    event.preventDefault();
     const updated = await runAction(
       () => intakesAPI.update(id, {
         ...editForm,
@@ -124,6 +139,35 @@ export default function IntakeDetailPage() {
     setEditing((current) => !current);
   };
 
+  const startEditingOffering = (offering) => {
+    setEditingOfferingId(offering.id);
+    setOfferingEditForm({
+      academicStartDate: toDateTimeLocal(offering.academicStartDate, intake.timezone),
+      academicEndDate: String(offering.academicEndDate).slice(0, 10),
+    });
+  };
+
+  const saveOfferingDates = async (event, offering) => {
+    event.preventDefault();
+    const periodError = validateIntakePeriod({
+      ...offeringEditForm,
+      season: intake.season,
+      year: intake.year,
+    });
+    if (periodError) {
+      setError(periodError);
+      return;
+    }
+    const updated = await runAction(
+      () => intakesAPI.updateOffering(id, offering.id, offeringEditForm),
+      'Program academic dates updated.',
+    );
+    if (updated) {
+      setEditingOfferingId(null);
+      setOfferingEditForm(null);
+    }
+  };
+
   if (loading) return <div className="card loading-card" role="status">Loading intake…</div>;
   if (!intake) {
     return (
@@ -134,9 +178,7 @@ export default function IntakeDetailPage() {
     );
   }
 
-  const intakeStarted = new Date(intake.academicStartDate).getTime() <= Date.now();
-  const admissionsUnavailable = intake.status === 'ARCHIVED' || intake.status === 'COMPLETED';
-  const registrationOpen = intake.admissionsOpen && !intakeStarted && !admissionsUnavailable;
+  const registrationOpen = intake.admissionsOpen && !admissionsUnavailable;
   return (
     <div className="page-stack">
       <Link className="back-link" to="/intakes"><ArrowLeft size={16} /> All intakes</Link>
@@ -145,16 +187,15 @@ export default function IntakeDetailPage() {
           <div>
             <span className="eyebrow">GATE {String(intake.gateNumber).padStart(2, '0')} · {seasonLabels[intake.season]} {intake.year}</span>
             <h1>Intake overview</h1>
-            <p>{intake.timezone} · {formatIntakeStart(intake.academicStartDate, intake.timezone)} – {formatIntakeDate(intake.academicEndDate)}</p>
+            <p>Program dates use {intake.timezone} and are managed separately for each offering.</p>
           </div>
           <span className={statusClass(intake.status)}>{statusLabel(intake.status)}</span>
         </div>
         {notice && <div className="notice notice-success">{notice}</div>}
         {error && <div className="notice notice-error" role="alert">{error}</div>}
         <div className="intake-date-grid">
-          <div><span>Academic period</span><strong>{formatIntakeStart(intake.academicStartDate, intake.timezone)} – {formatIntakeDate(intake.academicEndDate)}</strong></div>
           <div><span>Program offerings</span><strong>{intake.programOfferings.length}</strong></div>
-          <div><span>Registration</span><strong>{intakeStarted ? 'Locked · intake started' : registrationOpen ? 'Open' : 'Locked'}</strong></div>
+          <div><span>Registration</span><strong>{registrationOpen ? 'Open' : 'Locked'}</strong></div>
           <div><span>Approved students</span><strong>{intake.studentCounts?.approved ?? 0}</strong></div>
           <div><span>Waiting to start</span><strong>{intake.studentCounts?.waiting ?? 0}</strong></div>
           <div><span>Access eligible</span><strong>{intake.studentCounts?.eligible ?? 0}</strong></div>
@@ -163,10 +204,10 @@ export default function IntakeDetailPage() {
           <Button
             variant={registrationOpen ? 'secondary' : 'primary'}
             onClick={toggleAdmissions}
-            disabled={admissionsUnavailable || intakeStarted}
+            disabled={admissionsUnavailable}
           >
             {registrationOpen ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
-            {intakeStarted ? 'Intake has started' : registrationOpen ? 'Lock registration' : 'Unlock registration'}
+            {registrationOpen ? 'Lock all registration' : 'Unlock registration'}
           </Button>
           <Select
             aria-label="Intake status"
@@ -176,20 +217,20 @@ export default function IntakeDetailPage() {
           />
         </div>
         <p className="intake-admissions-note">
-          Registration stays open until the academic start time. Lock it early here if needed; started intakes are automatically removed from signup.
+          Applications close automatically at each program’s academic start time. This control can lock or unlock registration for every program in the intake.
         </p>
       </section>
 
       <section className="card">
         <div className="card-heading">
-          <div><span className="eyebrow">Intake configuration</span><h2>Dates and GATE</h2></div>
+          <div><span className="eyebrow">Intake configuration</span><h2>GATE and timezone</h2></div>
           <Button variant="outline" onClick={toggleEditing}>
             {editing ? 'Cancel editing' : 'Edit details'}
           </Button>
         </div>
         {editing && (
           <form onSubmit={updateDetails} className="intake-form">
-            <p className="intake-period-hint">The academic start is entered in the selected IANA timezone. Academic dates must fall within the selected GATE period and year.</p>
+            <p className="intake-period-hint">Each program’s dates must fit this GATE period. Changing the GATE or timezone is blocked if it would make existing program dates invalid.</p>
             <div className="intake-form-grid">
               <Select
                 label="GATE"
@@ -218,43 +259,9 @@ export default function IntakeDetailPage() {
               />
               <Input label="Year" type="number" min="2000" max="9999" value={editForm.year} onChange={(value) => setEditForm((current) => ({ ...current, year: value }))} required />
               <Input label="Timezone (IANA)" placeholder="UTC or Africa/Lagos" value={editForm.timezone} onChange={(value) => setEditForm((current) => ({ ...current, timezone: value }))} required />
-              <Input label={`Academic start (${editForm.timezone || 'UTC'})`} type="datetime-local" value={editForm.academicStartDate} onChange={(value) => setEditForm((current) => ({ ...current, academicStartDate: value }))} required />
-              <Input label="Academic end" type="date" value={editForm.academicEndDate} onChange={(value) => setEditForm((current) => ({ ...current, academicEndDate: value }))} required />
             </div>
             <div className="intake-form-actions"><Button type="submit">Save intake details</Button></div>
           </form>
-        )}
-      </section>
-
-      <section className="card">
-        <div className="card-heading">
-          <div><span className="eyebrow">Change history</span><h2>Academic start-time history</h2></div>
-        </div>
-        {intake.auditHistory?.length ? (
-          <div className="activity-list">
-            {intake.auditHistory.map((entry) => {
-              const details = entry.metadata || {};
-              return (
-                <article className="activity-row" key={entry.id}>
-                  <span className="activity-dot" />
-                  <span className="activity-description">
-                    <strong>{entry.actor} updated the official start</strong>
-                    <small>
-                      {details.previousAcademicStartDate
-                        ? `${formatIntakeStart(details.previousAcademicStartDate, details.previousTimezone || intake.timezone)} (${details.previousTimezone || intake.timezone}) → `
-                        : 'Previous start unavailable → '}
-                      {details.academicStartDate
-                        ? `${formatIntakeStart(details.academicStartDate, details.timezone || intake.timezone)} (${details.timezone || intake.timezone})`
-                        : 'Updated start unavailable'}
-                    </small>
-                  </span>
-                  <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="empty-state"><h3>No start-time changes recorded</h3><p>Changes to this Intake’s official start time and timezone will appear here.</p></div>
         )}
       </section>
 
@@ -264,25 +271,40 @@ export default function IntakeDetailPage() {
         </div>
         <form className="intake-offering-form" onSubmit={addProgrammes}>
           <label className="field intake-programme-picker">
-            <span className="label">Add programs</span>
+            <span className="label">Program</span>
             <select
               className="select"
-              multiple
-              value={selectedProgrammeIds}
-              onChange={(event) => setSelectedProgrammeIds(
-                Array.from(event.target.selectedOptions, (option) => option.value),
-              )}
+              value={offeringForm.programmeId}
+              onChange={(event) => setOfferingForm((current) => ({ ...current, programmeId: event.target.value }))}
               disabled={availableProgrammes.length === 0 || admissionsUnavailable}
-              aria-label="Programs to add"
+              aria-label="Program to add"
+              required
             >
+              <option value="">Select a program</option>
               {availableProgrammes.map((programme) => (
                 <option key={programme.id} value={programme.id}>
                   {programme.title}{programme.qualificationType ? ` · ${programme.qualificationType}` : ''}
                 </option>
               ))}
             </select>
-            <small>Active program offerings are available on signup until registration is locked or the intake starts.</small>
+            <small>Each program has its own academic dates and application deadline.</small>
           </label>
+          <Input
+            label={`Academic start (${intake.timezone || 'UTC'})`}
+            type="datetime-local"
+            value={offeringForm.academicStartDate}
+            onChange={(value) => setOfferingForm((current) => ({ ...current, academicStartDate: value }))}
+            required
+            disabled={admissionsUnavailable}
+          />
+          <Input
+            label="Academic end"
+            type="date"
+            value={offeringForm.academicEndDate}
+            onChange={(value) => setOfferingForm((current) => ({ ...current, academicEndDate: value }))}
+            required
+            disabled={admissionsUnavailable}
+          />
           <Select
             label="Initial offering status"
             value={offeringStatus}
@@ -290,56 +312,126 @@ export default function IntakeDetailPage() {
             options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
             disabled={admissionsUnavailable}
           />
-          <Button type="submit" disabled={!selectedProgrammeIds.length || admissionsUnavailable}>
-            <Plus size={16} /> Add selected
+          <Button type="submit" disabled={!offeringForm.programmeId || admissionsUnavailable}>
+            <Plus size={16} /> Add program
           </Button>
         </form>
 
         <div className="intake-offering-list">
-          {intake.programOfferings.map((offering) => (
-            <article className="intake-offering" key={offering.id}>
-              <div className="intake-offering-copy">
-                <strong>{offering.programme.title}</strong>
-                <span>{offering.programme.qualificationType || 'Qualification not specified'}</span>
-                <small>
-                  {offering._count.cohorts} cohort{offering._count.cohorts === 1 ? '' : 's'}
-                  {' · '}{offering._count.applications} application{offering._count.applications === 1 ? '' : 's'}
-                  {' · '}{offering._count.programEnrollments} enrollment{offering._count.programEnrollments === 1 ? '' : 's'}
-                  {offering.cohorts.length > 0 && ` · ${offering.cohorts.map(({ name }) => name).join(', ')}`}
-                </small>
-              </div>
-              <span className={statusClass(offering.status)}>{statusLabel(offering.status)}</span>
-              <div className="table-actions">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => runAction(
-                    () => intakesAPI.updateOffering(id, offering.id, offering.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'),
-                    'Offering status updated.',
+          {intake.programOfferings.map((offering) => {
+            const dateHistory = (offering.auditHistory || [])
+              .filter(({ metadata }) => metadata?.previousAcademicStartDate || metadata?.previousAcademicEndDate);
+            return (
+              <article className="intake-offering" key={offering.id}>
+                <div className="intake-offering-copy">
+                  <strong>{offering.programme.title}</strong>
+                  <span>{offering.programme.qualificationType || 'Qualification not specified'}</span>
+                  {editingOfferingId === offering.id ? (
+                    <form className="intake-form" onSubmit={(event) => saveOfferingDates(event, offering)}>
+                      <div className="intake-form-grid">
+                        <Input
+                          label={`Academic start (${intake.timezone || 'UTC'})`}
+                          type="datetime-local"
+                          value={offeringEditForm.academicStartDate}
+                          onChange={(value) => setOfferingEditForm((current) => ({ ...current, academicStartDate: value }))}
+                          required
+                        />
+                        <Input
+                          label="Academic end"
+                          type="date"
+                          value={offeringEditForm.academicEndDate}
+                          onChange={(value) => setOfferingEditForm((current) => ({ ...current, academicEndDate: value }))}
+                          required
+                        />
+                      </div>
+                      <div className="intake-form-actions">
+                        <Button type="submit" size="sm"><CalendarRange size={15} /> Save dates</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingOfferingId(null)}>Cancel</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <span>
+                      {formatIntakeStart(offering.academicStartDate, intake.timezone)}
+                      {' – '}{formatIntakeDate(offering.academicEndDate)}
+                    </span>
                   )}
-                  disabled={offering.status !== 'ACTIVE' && admissionsUnavailable}
-                >
-                  {offering.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                </Button>
-                <button
-                  className="icon-button action-danger"
-                  type="button"
-                  aria-label={`Remove ${offering.programme.title} offering`}
-                  title={offering._count.cohorts || offering._count.applications || offering._count.programEnrollments
-                    ? 'Deactivate instead; dependent records exist'
-                    : 'Remove offering'}
-                  disabled={offering._count.cohorts > 0 || offering._count.applications > 0 || offering._count.programEnrollments > 0}
-                  onClick={() => {
-                    if (window.confirm(`Remove ${offering.programme.title} from this intake?`)) {
-                      runAction(() => intakesAPI.removeOffering(id, offering.id), 'Offering removed.');
-                    }
-                  }}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </article>
-          ))}
+                  <small>
+                    {offering._count.cohorts} cohort{offering._count.cohorts === 1 ? '' : 's'}
+                    {' · '}{offering._count.applications} application{offering._count.applications === 1 ? '' : 's'}
+                    {' · '}{offering._count.programEnrollments} enrollment{offering._count.programEnrollments === 1 ? '' : 's'}
+                    {offering.cohorts.length > 0 && ` · ${offering.cohorts.map(({ name }) => name).join(', ')}`}
+                  </small>
+                  {dateHistory.length > 0 && (
+                    <details>
+                      <summary>Academic date history ({dateHistory.length})</summary>
+                      <div className="activity-list">
+                        {dateHistory.map((entry) => (
+                          <article className="activity-row" key={entry.id}>
+                            <span className="activity-dot" />
+                            <span className="activity-description">
+                              <strong>{entry.actor} updated program dates</strong>
+                              <small>
+                                {entry.metadata.previousAcademicStartDate
+                                  ? formatIntakeStart(entry.metadata.previousAcademicStartDate, intake.timezone)
+                                  : 'Start date unchanged'}
+                                {' – '}
+                                {entry.metadata.previousAcademicEndDate
+                                  ? formatIntakeDate(entry.metadata.previousAcademicEndDate)
+                                  : 'End date unchanged'}
+                                {' → '}
+                                {formatIntakeStart(entry.metadata.academicStartDate, intake.timezone)}
+                                {' – '}
+                                {formatIntakeDate(entry.metadata.academicEndDate)}
+                              </small>
+                            </span>
+                            <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+                <span className={statusClass(offering.status)}>{statusLabel(offering.status)}</span>
+                <div className="table-actions">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => startEditingOffering(offering)}
+                    disabled={editingOfferingId !== null}
+                  >
+                    Edit dates
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runAction(
+                      () => intakesAPI.updateOffering(id, offering.id, { status: offering.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }),
+                      'Offering status updated.',
+                    )}
+                    disabled={offering.status !== 'ACTIVE' && admissionsUnavailable}
+                  >
+                    {offering.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                  </Button>
+                  <button
+                    className="icon-button action-danger"
+                    type="button"
+                    aria-label={`Remove ${offering.programme.title} offering`}
+                    title={offering._count.cohorts || offering._count.applications || offering._count.programEnrollments
+                      ? 'Deactivate instead; dependent records exist'
+                      : 'Remove offering'}
+                    disabled={offering._count.cohorts > 0 || offering._count.applications > 0 || offering._count.programEnrollments > 0}
+                    onClick={() => {
+                      if (window.confirm(`Remove ${offering.programme.title} from this intake?`)) {
+                        runAction(() => intakesAPI.removeOffering(id, offering.id), 'Offering removed.');
+                      }
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
           {!intake.programOfferings.length && <div className="empty-state"><p>No programs are attached to this intake yet.</p></div>}
         </div>
       </section>

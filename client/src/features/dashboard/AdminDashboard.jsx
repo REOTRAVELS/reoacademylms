@@ -96,12 +96,16 @@ export default function AdminDashboard() {
                 (total, offering) => total + (offering._count?.applications || 0),
                 0,
               );
+              const offeringDates = (intake.programOfferings || []).map((offering) => (
+                `${offering.programme.title}: ${formatIntakeStart(offering.academicStartDate, intake.timezone)} to ${formatIntakeDate(offering.academicEndDate)}`
+              ));
               return (
                 <div className="activity-row" key={intake.id}>
                   <span className="activity-dot" />
                   <span className="activity-description">
                     <strong>{gate} — {intake.season} {intake.year}</strong>
-                    <small>{offeringCount} Programs · {formatIntakeStart(intake.academicStartDate, intake.timezone)} to {formatIntakeDate(intake.academicEndDate)} · {applicationCount} applications</small>
+                    <small>{offeringCount} Programs · {applicationCount} applications</small>
+                    {offeringDates.map((dates) => <small key={dates}>{dates}</small>)}
                   </span>
                   <span className={statusClass(intake.status)}>{statusLabel(intake.status)}</span>
                   <Link className="btn btn-ghost btn-sm" to={`/intakes/${intake.id}`}>Manage</Link>
