@@ -3,9 +3,15 @@ import app from './app.js';
 import { env } from './config/env.js';
 import prisma from './config/database.js';
 import { attachLiveClassRealtime } from './services/liveClassRealtime.js';
+import { ensureGeneratedOrdinaryClasses } from './services/cohortTimetable.js';
+import { startLiveClassReminderJob } from './services/liveClassReminders.js';
 
 const server = createServer(app);
 const io = attachLiveClassRealtime(server);
+const stopLiveClassReminderJob = startLiveClassReminderJob();
+void ensureGeneratedOrdinaryClasses().catch((error) => {
+  console.error('Cohort timetable initialization failed', error);
+});
 server.once('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     console.error(
@@ -27,6 +33,7 @@ const shutdown = (signal) => {
   if (shutdownStarted) return;
   shutdownStarted = true;
   console.log(`Received ${signal}; shutting down gracefully`);
+  stopLiveClassReminderJob();
 
   const timeout = setTimeout(() => {
     console.error('Graceful shutdown timed out');

@@ -7,6 +7,12 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/class-reminders",
+      "schedule": "* * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:__apiPath((?!socket-io(?:/|$)).*)",

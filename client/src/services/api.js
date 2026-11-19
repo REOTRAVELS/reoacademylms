@@ -317,6 +317,17 @@ export const cohortsAPI = {
   get: async (id) => api.get(`/cohorts/${id}`),
   create: async (form) => api.post('/cohorts/', form),
   update: async (id, form) => api.put(`/cohorts/${id}`, form),
+  uploadTimetable: async (id, file) => {
+    const localForm = new FormData();
+    localForm.append('file', file);
+    return uploadWithStorageIntent({
+      intentPath: `/cohorts/${id}/timetable/upload-intent`,
+      finalizePath: `/cohorts/${id}/timetable`,
+      file,
+      localForm,
+    });
+  },
+  timetableDownloadUrl: (id) => `${api.defaults.baseURL}/cohorts/${id}/timetable`,
   delete: async (id) => api.delete(`/cohorts/${id}`),
   enrolStudent: async (id, studentId) => api.post(`/cohorts/${id}/enrol`, { studentId }),
   removeEnrolment: async (id, enrolmentId) => api.delete(`/cohorts/${id}/enrolments/${enrolmentId}`),

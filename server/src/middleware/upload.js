@@ -39,6 +39,8 @@ export const uploadResourceFile = createUploadMiddleware(
   createUploader(resourceTypes, env.maxFileSizeMb * 1024 * 1024),
 );
 
+export const uploadCohortTimetableFile = uploadResourceFile;
+
 export const uploadAvatarFile = createUploadMiddleware(
   createUploader(avatarTypes, 5 * 1024 * 1024),
 );

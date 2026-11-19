@@ -5,14 +5,13 @@ import { ok, fail } from '../utils/response.js';
 import { audit } from '../utils/audit.js';
 import { canManageLiveClass, findAccessibleLiveClass } from '../utils/liveClassAccess.js';
 import { activeProgramCohortForStudent } from '../utils/courseAccess.js';
+import { ensureGeneratedOrdinaryClasses } from '../services/cohortTimetable.js';
 import {
   findLiveClassConflicts,
   formatLiveClassIcs,
-  generateRecurringClassDates,
   getJoinTokenTtlSeconds,
   getLiveClassConflictSearchRange,
   isLiveClassJoinable,
-  parseCohortSchedule,
 } from '../utils/liveClassScheduling.js';
 import {
   closeRoom,
@@ -30,7 +29,7 @@ import {
 
 const classIncludes = {
   course: { select: { id: true, title: true } },
-  cohort: { select: { id: true, name: true } },
+  cohort: { select: { id: true, name: true, timetableFileName: true } },
 };
 
 const getManagedClass = async (id, user) => {
@@ -97,70 +96,6 @@ const getScheduleConflicts = async (database, { course, cohort, startsAt, durati
   };
 
   return findLiveClassConflicts(candidate, existingClasses, excludedClassId);
-};
-
-const ensureGeneratedOrdinaryClasses = async (database = prisma) => {
-  const cohorts = await database.cohort.findMany({
-    where: {
-      schedule: { not: null, not: '' },
-      status: { not: 'ARCHIVED' },
-    },
-    include: {
-      courses: {
-        include: {
-          course: {
-            include: { trainers: { select: { trainerId: true } } },
-          },
-        },
-      },
-      trainers: { select: { trainerId: true } },
-    },
-  });
-
-  for (const cohort of cohorts) {
-    const scheduleMeta = parseCohortSchedule(cohort.schedule);
-    if (!scheduleMeta.days.length || scheduleMeta.startMinutes === null) continue;
-
-    const rangeStart = cohort.startDate || new Date();
-    const rangeEnd = cohort.endDate || new Date(Date.now() + 12 * 7 * 24 * 60 * 60_000);
-    const occurrences = generateRecurringClassDates({ schedule: cohort.schedule, startDate: rangeStart, endDate: rangeEnd });
-    if (!occurrences.length) continue;
-
-    const trainerCandidates = [
-      ...cohort.trainers.map(({ trainerId }) => trainerId),
-      ...cohort.courses.flatMap(({ course }) => course.trainers.map(({ trainerId }) => trainerId)),
-    ];
-    const createdBy = await database.user.findFirst({
-      where: trainerCandidates.length ? { id: { in: trainerCandidates } } : { role: { name: 'SUPER_ADMIN' } },
-      select: { id: true },
-    });
-    if (!createdBy) continue;
-
-    for (const courseAssignment of cohort.courses) {
-      const course = courseAssignment.course;
-      for (const startsAt of occurrences) {
-        const existing = await database.liveClass.findFirst({
-          where: { cohortId: cohort.id, courseId: course.id, startsAt },
-          select: { id: true },
-        });
-        if (existing) continue;
-
-        const title = `${course.title} · ${cohort.name}`;
-        await database.liveClass.create({
-          data: {
-            courseId: course.id,
-            cohortId: cohort.id,
-            createdById: createdBy.id,
-            title,
-            description: `Automatically generated from the cohort timetable (${cohort.schedule}).`,
-            roomName: `reo-${randomUUID()}`,
-            startsAt,
-            durationMins: scheduleMeta.durationMins || 60,
-          },
-        });
-      }
-    }
-  }
 };
 
 export const listLiveClasses = async (req, res) => {

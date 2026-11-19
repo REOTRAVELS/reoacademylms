@@ -8,6 +8,7 @@ import DataTable from '../../components/tables/DataTable';
 import { statusLabel } from '../../components/common/navConfig';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import CohortTimetableFields from './CohortTimetableFields';
 
 export default function CohortsPage() {
   const { user } = useAuth();
@@ -39,7 +40,14 @@ export default function CohortsPage() {
       setProgramOfferings((intakeResponse.data.data || []).flatMap((intake) =>
         intake.programOfferings.map((offering) => ({
           ...offering,
-          intake: { id: intake.id, gateNumber: intake.gateNumber, season: intake.season, year: intake.year, status: intake.status },
+          intake: {
+            id: intake.id,
+            gateNumber: intake.gateNumber,
+            season: intake.season,
+            year: intake.year,
+            status: intake.status,
+            timezone: intake.timezone,
+          },
         })),
       ));
     } catch (e) { setError(e.response?.data?.message || 'Could not load programs and intake offerings.'); }
@@ -52,6 +60,11 @@ export default function CohortsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const timeRange = form.schedule.match(/(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    if (timeRange && timeRange[2] <= timeRange[1]) {
+      setError('Class end time must be after its start time.');
+      return;
+    }
     try {
       await cohortsAPI.create(form);
       setForm({ name: '', programmeId: '', intakeProgramOfferingId: '', status: 'PLANNED', startDate: '', endDate: '', schedule: '' });
@@ -200,7 +213,11 @@ export default function CohortsPage() {
               <Input label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
               <Input label="End Date" type="date" value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} />
             </div>
-            <Input label="Schedule" value={form.schedule} onChange={(v) => setForm({ ...form, schedule: v })} placeholder="e.g., Mon-Fri 9am-5pm" />
+            <CohortTimetableFields
+              schedule={form.schedule}
+              timezone={programOfferings.find((offering) => offering.id === form.intakeProgramOfferingId)?.intake.timezone}
+              onChange={(schedule) => setForm((current) => ({ ...current, schedule }))}
+            />
             <Select label="Status" value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={[{ value: 'PLANNED', label: 'Planned' }, { value: 'ACTIVE', label: 'Active' }, { value: 'COMPLETED', label: 'Completed' }, { value: 'ARCHIVED', label: 'Archived' }]} />
             <Button type="submit" variant="primary">Create Cohort</Button>
           </form>

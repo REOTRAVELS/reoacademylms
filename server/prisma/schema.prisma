@@ -199,6 +199,7 @@ model User {
   liveClassInteractions              LiveClassInteraction[]
   liveClassEngagements               LiveClassEngagement[]
   liveClassRecordings                LiveClassRecording[]
+  liveClassReminderDeliveries       LiveClassReminderDelivery[]
   discussionPostsAuthored            CourseDiscussionPost[]               @relation("DiscussionPostAuthor")
   discussionPostsRemoved             CourseDiscussionPost[]               @relation("DiscussionPostRemover")
   discussionReports                  CourseDiscussionReport[]             @relation("DiscussionReportReporter")
@@ -364,6 +365,10 @@ model Cohort {
   endDate                 DateTime?
   status                  CohortStatus           @default(PLANNED)
   schedule                String?
+  timetableFileName       String?
+  timetableMimeType       String?
+  timetableStoragePath    String?
+  timetableSizeBytes      Int?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   enrolments              Enrolment[]
@@ -743,6 +748,17 @@ enum LiveClassStatus {
   CANCELLED
 }
 
+enum LiveClassReminderChannel {
+  EMAIL
+}
+
+enum LiveClassReminderDeliveryStatus {
+  PENDING
+  SENDING
+  DELIVERED
+  FAILED
+}
+
 model LiveClass {
   id           String                 @id @default(cuid())
   courseId     String?
@@ -766,9 +782,30 @@ model LiveClass {
   interactions LiveClassInteraction[]
   engagements  LiveClassEngagement[]
   recordings   LiveClassRecording[]
+  reminderDeliveries LiveClassReminderDelivery[]
 
   @@index([cohortId, startsAt])
   @@index([courseId, startsAt])
+}
+
+model LiveClassReminderDelivery {
+  id            String                          @id @default(cuid())
+  liveClassId   String
+  liveClass     LiveClass                       @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel       LiveClassReminderChannel
+  targetKey     String
+  status        LiveClassReminderDeliveryStatus @default(PENDING)
+  attempts      Int                             @default(0)
+  nextAttemptAt DateTime                        @default(now())
+  lockedAt      DateTime?
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime                        @default(now())
+
+  @@unique([liveClassId, userId, channel, targetKey])
+  @@index([status, nextAttemptAt])
 }
 
 model LiveClassPresence {

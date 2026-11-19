@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { liveClassesAPI } from '../../services/api';
+import { cohortsAPI, liveClassesAPI } from '../../services/api';
 import { Button } from '../../components/common/Button';
 
 const viewOptions = ['DAY', 'WEEK', 'MONTH', 'AGENDA'];
@@ -27,17 +27,16 @@ function getRange(date, view) {
   return { start: firstDay, end: addDays(firstDay, 42) };
 }
 
-const isJoinable = (liveClass) => {
+const isJoinable = (liveClass, now = Date.now()) => {
   if (!liveClass?.startsAt) return false;
   if (liveClass.status === 'CANCELLED' || liveClass.status === 'ENDED') return false;
   if (liveClass.status === 'LIVE') return true;
   const start = new Date(liveClass.startsAt).getTime();
   const classEnd = start + Number(liveClass.durationMins || 60) * 60_000;
-  const now = Date.now();
   return now >= start - 40 * 60_000 && now < classEnd;
 };
 
-function EventItem({ liveClass, onExport }) {
+function EventItem({ liveClass, onExport, now }) {
   const startsAt = new Date(liveClass.startsAt);
   const details = [
     liveClass.course?.title || (liveClass.cohort?.name ? 'General class' : 'Staff-only class'),
@@ -50,7 +49,12 @@ function EventItem({ liveClass, onExport }) {
       <span>{formatTime(startsAt)} · {liveClass.durationMins} min</span>
       <small>{details}</small>
       <div className="calendar-event-actions">
-        {isJoinable(liveClass) && <Link className="btn btn-sm btn-primary" to={`/live-classes/${liveClass.id}/room`}>Join class</Link>}
+        {isJoinable(liveClass, now) && <Link className="btn btn-sm btn-primary" to={`/live-classes/${liveClass.id}/room`}>Join class</Link>}
+        {liveClass.cohort?.timetableFileName && (
+          <a className="btn btn-sm btn-secondary" href={cohortsAPI.timetableDownloadUrl(liveClass.cohort.id)} target="_blank" rel="noreferrer">
+            Timetable document
+          </a>
+        )}
         <Button size="sm" variant="secondary" onClick={() => onExport(liveClass)}>Export .ics</Button>
       </div>
     </article>
@@ -63,6 +67,7 @@ export default function CalendarPage() {
   const [view, setView] = useState('WEEK');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   const loadCalendar = useCallback(async () => {
     setError('');
@@ -78,6 +83,15 @@ export default function CalendarPage() {
 
   useEffect(() => {
     void loadCalendar();
+    const refresh = setInterval(() => {
+      setNow(Date.now());
+      void loadCalendar();
+    }, 60_000);
+    const clock = setInterval(() => setNow(Date.now()), 30_000);
+    return () => {
+      clearInterval(refresh);
+      clearInterval(clock);
+    };
   }, [loadCalendar]);
 
   const range = useMemo(() => getRange(selectedDate, view), [selectedDate, view]);
@@ -122,6 +136,53 @@ export default function CalendarPage() {
     ? Array.from({ length: 42 }, (_, index) => addDays(range.start, index))
     : [];
   const classesForDay = (day) => classes.filter((liveClass) => dateKey(new Date(liveClass.startsAt)) === dateKey(day));
+  const calendarDays = view === 'DAY' ? [startOfDay(selectedDate)] : Array.from({ length: 7 }, (_, index) => addDays(range.start, index));
+  const timeGrid = (daysInGrid) => (
+    <div className="calendar-time-scroll">
+      <section
+        className="calendar-time-grid"
+        style={{ '--calendar-day-columns': daysInGrid.length }}
+        aria-label={`${view.toLowerCase()} calendar time grid`}
+      >
+        <div className="calendar-time-corner" />
+        {daysInGrid.map((day) => (
+          <strong className="calendar-time-day" key={dateKey(day)}>
+            {new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(day)}
+          </strong>
+        ))}
+        <div className="calendar-time-labels">
+          {Array.from({ length: 24 }, (_, hour) => (
+            <span key={hour}>{new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).format(new Date(2000, 0, 1, hour))}</span>
+          ))}
+        </div>
+        {daysInGrid.map((day) => (
+          <div className="calendar-time-column" key={dateKey(day)} aria-label={dateKey(day)}>
+            {Array.from({ length: 24 }, (_, hour) => <div className="calendar-hour-line" key={hour} />)}
+            {classesForDay(day).map((liveClass) => {
+              const startsAt = new Date(liveClass.startsAt);
+              const minuteOfDay = startsAt.getHours() * 60 + startsAt.getMinutes();
+              const height = Math.min(1536 - (minuteOfDay / 60) * 64, Math.max(42, Number(liveClass.durationMins || 60) * 64 / 60));
+              return (
+                <article
+                  className="calendar-time-event"
+                  key={liveClass.id}
+                  style={{ top: `${minuteOfDay / 60 * 64}px`, height: `${height}px` }}
+                >
+                  <strong>{liveClass.title}</strong>
+                  <span>{formatTime(startsAt)} · {liveClass.durationMins} min</span>
+                  {isJoinable(liveClass, now) && <Link to={`/live-classes/${liveClass.id}/room`}>Join class</Link>}
+                  {liveClass.cohort?.timetableFileName && (
+                    <a href={cohortsAPI.timetableDownloadUrl(liveClass.cohort.id)} target="_blank" rel="noreferrer">Timetable document</a>
+                  )}
+                  <Button size="sm" variant="secondary" onClick={() => exportCalendar(liveClass)}>Export .ics</Button>
+                </article>
+              );
+            })}
+          </div>
+        ))}
+      </section>
+    </div>
+  );
 
   return (
     <div className="page-container calendar-page">
@@ -165,11 +226,13 @@ export default function CalendarPage() {
               </button>
             ))}
           </section>
+        : view === 'DAY' || view === 'WEEK'
+          ? timeGrid(calendarDays)
         : visibleClasses.length === 0
           ? <section className="card empty-state"><h2>No scheduled classes in this period</h2><p>Classes for your courses and cohort will appear here.</p></section>
           : <section className={`calendar-events${view === 'DAY' ? ' single-day' : ''}`} aria-label={`${view.toLowerCase()} calendar events`}>
             {visibleClasses.map((liveClass) => (
-              <EventItem key={liveClass.id} liveClass={liveClass} onExport={exportCalendar} />
+              <EventItem key={liveClass.id} liveClass={liveClass} onExport={exportCalendar} now={now} />
             ))}
           </section>}
     </div>

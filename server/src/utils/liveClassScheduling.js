@@ -1,3 +1,5 @@
+import { localDateInTimezone, parseLocalDateTimeInTimezone } from './intakeDateTime.js';
+
 const asSet = (items, key) => new Set((items || []).map((item) => item[key]));
 
 const intersects = (left, right) => [...left].some((value) => right.has(value));
@@ -77,31 +79,54 @@ export const parseCohortSchedule = (scheduleText) => {
   const singleTimeMatch = text.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
 
   let startMinutes = null;
+  let endMinutes = null;
   let durationMins = 60;
 
   const toMinutes = (hour, minute = '0', meridiem = '') => {
-    let total = Number(hour) % 12;
+    const parsedHour = Number(hour);
+    const parsedMinute = Number(minute || 0);
+    if (!Number.isInteger(parsedMinute) || parsedMinute < 0 || parsedMinute > 59) return Number.NaN;
     if (meridiem) {
-      if (meridiem.toLowerCase() === 'pm' && Number(hour) !== 12) total += 12;
-      if (meridiem.toLowerCase() === 'am' && Number(hour) === 12) total = 0;
+      const hour12 = parsedHour;
+      if (hour12 < 1 || hour12 > 12) return Number.NaN;
+      let total = hour12 % 12;
+      if (meridiem.toLowerCase() === 'pm') total += 12;
+      return total * 60 + parsedMinute;
     }
-    return total * 60 + Number(minute || 0);
+    if (!Number.isInteger(parsedHour) || parsedHour < 0 || parsedHour > 23) return Number.NaN;
+    return parsedHour * 60 + parsedMinute;
   };
 
   if (rangeMatch) {
     const [, startHour, startMinute, startMeridiem, endHour, endMinute, endMeridiem] = rangeMatch;
     startMinutes = toMinutes(startHour, startMinute || '0', startMeridiem);
-    const endMinutes = toMinutes(endHour, endMinute || '0', endMeridiem);
-    durationMins = Math.max(15, endMinutes - startMinutes);
+    endMinutes = toMinutes(endHour, endMinute || '0', endMeridiem);
+    durationMins = endMinutes - startMinutes;
   } else if (singleTimeMatch) {
     const [, hour, minute, meridiem] = singleTimeMatch;
     startMinutes = toMinutes(hour, minute || '0', meridiem);
   }
 
+  if (
+    !Number.isFinite(startMinutes)
+    || !Number.isFinite(durationMins)
+    || startMinutes < 0
+    || startMinutes >= 24 * 60
+    || (rangeMatch && (endMinutes >= 24 * 60 || durationMins < 15 || durationMins > 8 * 60))
+  ) {
+    return { days, startMinutes: null, durationMins: 60 };
+  }
+
   return { days, startMinutes, durationMins };
 };
 
-export const generateRecurringClassDates = ({ schedule, startDate, endDate, now = new Date() }) => {
+export const generateRecurringClassDates = ({
+  schedule,
+  startDate,
+  endDate,
+  timezone = 'UTC',
+  now = new Date(),
+}) => {
   if (typeof schedule !== 'string' || !schedule.trim()) return [];
 
   const parsed = parseCohortSchedule(schedule);
@@ -109,19 +134,27 @@ export const generateRecurringClassDates = ({ schedule, startDate, endDate, now 
 
   const rangeStart = startDate ? new Date(startDate) : new Date(now);
   const rangeEnd = endDate ? new Date(endDate) : new Date(rangeStart.getTime() + 12 * 7 * 24 * 60 * 60_000);
-  const cursor = new Date(rangeStart);
-  cursor.setUTCHours(0, 0, 0, 0);
+  const firstDate = startDate
+    ? new Date(startDate).toISOString().slice(0, 10)
+    : localDateInTimezone(now, timezone);
+  const lastDate = endDate
+    ? new Date(endDate).toISOString().slice(0, 10)
+    : localDateInTimezone(rangeEnd, timezone);
+  const startDay = new Date(`${firstDate}T00:00:00.000Z`);
+  const endDay = new Date(`${lastDate}T00:00:00.000Z`);
 
   const result = [];
-  while (cursor <= rangeEnd) {
-    if (parsed.days.includes(cursor.getUTCDay())) {
-      const candidate = new Date(cursor);
-      candidate.setUTCHours(Math.floor(parsed.startMinutes / 60), parsed.startMinutes % 60, 0, 0);
-      if (candidate >= rangeStart && candidate <= rangeEnd) {
-        result.push(candidate);
-      }
+  for (const cursor = startDay; cursor <= endDay; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    if (!parsed.days.includes(cursor.getUTCDay())) continue;
+    const date = cursor.toISOString().slice(0, 10);
+    const localStart = `${date}T${String(Math.floor(parsed.startMinutes / 60)).padStart(2, '0')}:${String(parsed.startMinutes % 60).padStart(2, '0')}`;
+    const parsedStart = parseLocalDateTimeInTimezone(localStart, timezone);
+    if (!parsedStart.date) continue;
+    const candidate = parsedStart.date;
+    const candidateDate = localDateInTimezone(candidate, timezone);
+    if (candidateDate >= firstDate && candidateDate <= lastDate && (startDate || candidate >= rangeStart)) {
+      result.push(candidate);
     }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return result;

@@ -80,6 +80,32 @@ export const createEmailService = ({ mailTransport, from }) => ({
       ].join('\n'),
     });
   },
+  sendLiveClassReminderEmail: async (
+    email,
+    { firstName, classTitle, cohortName, startsAt, timezone, calendarUrl },
+  ) => {
+    const formattedStart = new Intl.DateTimeFormat('en', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: timezone,
+    }).format(startsAt);
+    await mailTransport.sendMail({
+      from,
+      to: email,
+      subject: `Class starts in about 40 minutes: ${classTitle}`,
+      text: [
+        `Hello ${firstName || 'there'},`,
+        '',
+        `Your class "${classTitle}" starts in about 40 minutes.`,
+        `Start time: ${formattedStart} (${timezone}).`,
+        ...(cohortName ? [`Cohort: ${cohortName}.`] : []),
+        '',
+        `Open your calendar to join the class: ${calendarUrl}`,
+        '',
+        'You can join from the class event 40 minutes before it starts.',
+      ].join('\n'),
+    });
+  },
 });
 
 export const isEmailDeliveryConfigured = () => Boolean(emailConfiguration);
@@ -99,4 +125,8 @@ export const sendPasswordResetEmail = (...args) => (
 
 export const sendInvitationEmail = (...args) => (
   requireEmailService().sendInvitationEmail(...args)
+);
+
+export const sendLiveClassReminderEmail = (...args) => (
+  requireEmailService().sendLiveClassReminderEmail(...args)
 );

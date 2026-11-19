@@ -738,9 +738,36 @@ body {
 .calendar-event > strong { color: var(--color-primary); font-size: 13px; }
 .calendar-event > span:not(.badge), .calendar-event > small { color: var(--color-text-muted); font-size: 11px; }
 .calendar-event-actions { display: flex; gap: 7px; }
+.calendar-time-scroll { overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.calendar-time-grid { display: grid; grid-template-columns: 58px repeat(var(--calendar-day-columns), minmax(150px, 1fr)); grid-template-rows: 42px 1536px; min-width: max-content; }
+.calendar-time-corner, .calendar-time-day { position: sticky; top: 0; z-index: 2; display: grid; align-items: center; padding: 0 8px; border-bottom: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text-muted); font-size: 11px; }
+.calendar-time-corner { left: 0; z-index: 3; }
+.calendar-time-day { justify-content: center; border-left: 1px solid var(--color-border); }
+.calendar-time-labels { position: sticky; left: 0; z-index: 1; display: grid; grid-template-rows: repeat(24, 64px); padding-right: 7px; background: var(--color-surface); }
+.calendar-time-labels > span { position: relative; top: -8px; color: var(--color-text-muted); text-align: right; font-size: 10px; }
+.calendar-time-column { position: relative; border-left: 1px solid var(--color-border); background: #fff; }
+.calendar-hour-line { height: 64px; border-top: 1px solid #edf0ed; }
+.calendar-time-event { position: absolute; z-index: 1; left: 3px; right: 3px; display: grid; align-content: start; gap: 2px; overflow: hidden; padding: 5px 6px; border-left: 3px solid var(--color-primary); border-radius: 5px; background: #eaf2ed; color: var(--color-primary); font-size: 10px; }
+.calendar-time-event > strong, .calendar-time-event > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-time-event > a { color: var(--color-secondary); font-weight: 700; }
+.calendar-time-event .btn { justify-self: start; min-height: 23px; padding: 2px 6px; font-size: 10px; }
 .calendar-reschedule-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; width: 100%; padding-top: 12px; border-top: 1px solid var(--color-border); }
 .calendar-reschedule-form .form-field { flex: 1 1 180px; margin: 0; }
 .calendar-reschedule-form > .btn { flex: 0 0 auto; }
+.cohort-timetable-form { display: grid; gap: 14px; }
+.cohort-timetable-upload { display: grid; justify-items: start; gap: 9px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.cohort-timetable-upload .form-field { width: min(100%, 520px); margin: 0; }
+.cohort-timetable-upload input[type="file"] { width: 100%; }
+.cohort-timetable-upload > a { display: inline-flex; align-items: center; gap: 7px; color: var(--color-secondary); font-size: 13px; overflow-wrap: anywhere; }
+.timetable-fields { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 10px; }
+.timetable-fields legend { padding: 0 5px; color: var(--color-primary); font-size: 13px; font-weight: 700; }
+.field-hint { color: var(--color-text-muted); font-size: 12px; }
+.timetable-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.timetable-days label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 7px; font-size: 12px; }
+.timetable-days input { accent-color: var(--color-primary); }
+.timetable-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 520px; }
+.timetable-times .form-field { margin: 0; }
+.field-error { color: var(--color-error, #a12622); font-size: 12px; }
 @media (max-width: 640px) {
   .calendar-toolbar { align-items: stretch; flex-direction: column; }
   .calendar-navigation, .calendar-view-switch { justify-content: space-between; }
@@ -749,6 +776,7 @@ body {
   .calendar-month-day small { display: none; }
   .calendar-event { grid-template-columns: auto 1fr; }
   .calendar-event-actions { grid-column: 1 / -1; }
+  .timetable-times { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1100px) {

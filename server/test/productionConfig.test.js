@@ -24,6 +24,7 @@ const loadConfig = (overrides = {}) => spawnSync(
       EMAIL_FROM: '',
       SMTP_URL: 'smtps://mail-user:mail-password@smtp.example.test:465',
       SMTP_FROM: 'REO Academy <no-reply@example.test>',
+      CRON_SECRET: 'cron-test-secret',
       VERCEL: '',
       REDIS_URL: '',
       LIVEKIT_URL: 'wss://rtc.example.test',
@@ -103,6 +104,14 @@ test('production configuration accepts Brevo HTTPS email and requires Vercel Red
 
   const withRedis = loadConfig({ VERCEL: '1', REDIS_URL: 'rediss://user:pass@redis.example.test:6379' });
   assert.equal(withRedis.status, 0, withRedis.stderr);
+
+  const missingCronSecret = loadConfig({
+    VERCEL: '1',
+    REDIS_URL: 'rediss://user:pass@redis.example.test:6379',
+    CRON_SECRET: '',
+  });
+  assert.notEqual(missingCronSecret.status, 0);
+  assert.match(missingCronSecret.stderr, /CRON_SECRET is required on Vercel/);
 });
 
 test('production configuration rejects insecure or local recording service endpoints', () => {

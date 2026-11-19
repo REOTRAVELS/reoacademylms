@@ -131,3 +131,30 @@ test('recurring cohort schedules generate ordinary class dates within the cohort
     '2026-01-14T09:00:00.000Z',
   ]);
 });
+
+test('recurring cohort schedules use the intake timezone and include the final cohort date', () => {
+  const dates = generateRecurringClassDates({
+    schedule: 'Sun 09:00-10:30',
+    startDate: new Date('2026-03-08T00:00:00.000Z'),
+    endDate: new Date('2026-03-15T00:00:00.000Z'),
+    timezone: 'America/Los_Angeles',
+  });
+
+  assert.deepEqual(dates.map((date) => date.toISOString()), [
+    '2026-03-08T16:00:00.000Z',
+    '2026-03-15T16:00:00.000Z',
+  ]);
+});
+
+test('recurring cohort schedules reject invalid times and durations', () => {
+  assert.deepEqual(generateRecurringClassDates({
+    schedule: 'Mon 24:00-25:00',
+    startDate: new Date('2026-01-05T00:00:00.000Z'),
+    endDate: new Date('2026-01-05T00:00:00.000Z'),
+  }), []);
+  assert.deepEqual(generateRecurringClassDates({
+    schedule: 'Mon 10:00-09:00',
+    startDate: new Date('2026-01-05T00:00:00.000Z'),
+    endDate: new Date('2026-01-05T00:00:00.000Z'),
+  }), []);
+});

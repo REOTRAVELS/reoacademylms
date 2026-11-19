@@ -26,8 +26,16 @@ test('email service builds password reset and role-specific invitation emails', 
     expiresAt,
     'STUDENT',
   );
+  await emailService.sendLiveClassReminderEmail('student@example.test', {
+    firstName: 'Alex',
+    classTitle: 'Customer Relations',
+    cohortName: 'Winter Intake',
+    startsAt: new Date('2027-01-08T12:00:00.000Z'),
+    timezone: 'Africa/Accra',
+    calendarUrl: 'https://academy.example.test/calendar',
+  });
 
-  assert.equal(messages.length, 3);
+  assert.equal(messages.length, 4);
   assert.equal(messages[0].from, 'REO Academy <no-reply@example.test>');
   assert.equal(messages[0].to, 'person@example.test');
   assert.match(messages[0].text, /reset-password\?token=reset-token/);
@@ -40,6 +48,11 @@ test('email service builds password reset and role-specific invitation emails', 
   assert.match(messages[2].text, /as a Student/);
   assert.match(messages[2].text, /accept-invite\/student-token/);
   assert.match(messages[2].text, /approved Program application and an active Program enrollment/);
+  assert.equal(messages[3].to, 'student@example.test');
+  assert.match(messages[3].subject, /class starts in about 40 minutes/i);
+  assert.match(messages[3].text, /Friday, January 8, 2027 at 12:00 PM/);
+  assert.match(messages[3].text, /Winter Intake/);
+  assert.match(messages[3].text, /https:\/\/academy\.example\.test\/calendar/);
 });
 
 test('Brevo transport sends transactional email over HTTPS with the verified sender', async () => {
