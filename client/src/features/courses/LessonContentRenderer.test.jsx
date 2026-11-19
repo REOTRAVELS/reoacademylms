@@ -34,7 +34,8 @@ describe('LessonContentRenderer', () => {
     expect(screen.getByText('the route map').tagName).toBe('STRONG');
     expect(container.querySelector('video').getAttribute('src')).toBe(resourcesAPI.downloadUrl('video-1'));
     expect(screen.getByRole('img', { name: 'Route map' }).getAttribute('src')).toBe(resourcesAPI.downloadUrl('image-1'));
-    expect(screen.getByRole('link', { name: /Travel checklist/ }).getAttribute('href')).toBe(resourcesAPI.downloadUrl('document-1'));
+    expect(screen.getByTitle('Travel checklist').getAttribute('src')).toBe(`${resourcesAPI.downloadUrl('document-1')}#toolbar=0&navpanes=0`);
+    expect(screen.queryByRole('link', { name: /Travel checklist/ })).toBeNull();
     const externalGuide = screen.getByRole('link', { name: /External guide/ });
     expect(externalGuide.getAttribute('href')).toBe('https://example.com/guide');
     expect(externalGuide.getAttribute('rel')).toBe('noreferrer');

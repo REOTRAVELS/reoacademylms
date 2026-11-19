@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, Check, ChevronLeft, ChevronRight, Clock3, Download, GraduationCap, List, Play, UserRound } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, ChevronLeft, ChevronRight, Clock3, FileText, GraduationCap, Image, List, Play, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/common/Button';
 import { resourcesAPI } from '../../services/api';
@@ -43,22 +43,59 @@ function ResourceList({ resources, title }) {
   return (
     <section className="student-player-resources" aria-label={title}>
       <h3>{title}</h3>
-      {resources.map((resource) => (
-        <a key={resource.id} href={resourcesAPI.downloadUrl(resource.id)} target="_blank" rel="noreferrer">
-          <Download size={15} />
-          <span>{resource.originalName || 'Course resource'}<small>{resource.mimeType || 'Learning material'}</small></span>
-        </a>
-      ))}
+      {resources.map((resource) => {
+        const url = resourcesAPI.downloadUrl(resource.id);
+        const isVideo = resource.mimeType?.startsWith('video/');
+        const isPdf = resource.mimeType === 'application/pdf';
+        const isImage = resource.mimeType?.startsWith('image/');
+        return (
+          <article className="student-player-resource-card" key={resource.id}>
+            <header className="student-player-resource-heading">
+              {isVideo ? <Play size={16} aria-hidden="true" /> : isImage ? <Image size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
+              <span>
+                <strong>{resource.originalName || 'Course resource'}</strong>
+                <small>{isVideo ? 'Video · play in this course' : isPdf ? 'PDF · read in this course' : resource.mimeType || 'Learning material'}</small>
+              </span>
+            </header>
+            {isVideo && <CourseVideo url={url} title={resource.originalName || 'Course video'} />}
+            {isPdf && (
+              <iframe
+                className="student-player-resource-pdf"
+                title={resource.originalName || 'Course PDF'}
+                src={`${url}#toolbar=0&navpanes=0`}
+                loading="lazy"
+              />
+            )}
+            {isImage && <img className="student-player-resource-image" src={url} alt={resource.originalName || 'Course image'} loading="lazy" />}
+            {!isVideo && !isPdf && !isImage && (
+              <p className="student-player-resource-note">
+                This file type cannot be previewed here.
+                {' '}
+                <a href={url} target="_blank" rel="noreferrer">Open resource</a>
+              </p>
+            )}
+          </article>
+        );
+      })}
     </section>
   );
 }
 
-function CourseVideo({ url }) {
+function CourseVideo({ url, title = 'Course video' }) {
   const [unavailable, setUnavailable] = useState(false);
   if (unavailable) {
     return <p className="lesson-resource-unavailable" role="note">This video could not be loaded. Contact your Tutor.</p>;
   }
-  return <video className="student-player-video" controls preload="metadata" src={url} onError={() => setUnavailable(true)}>
+  return <video
+    className="student-player-video"
+    aria-label={title}
+    controls
+    controlsList="nodownload"
+    playsInline
+    preload="metadata"
+    src={url}
+    onError={() => setUnavailable(true)}
+  >
     Your browser cannot play this video.
   </video>;
 }

@@ -48,9 +48,27 @@ describe('StudentCoursePlayer', () => {
     expect(screen.getByText('4 hours')).toBeTruthy();
     expect(screen.getByText('Plan itineraries')).toBeTruthy();
     expect(screen.getAllByText('Ada Tutor')).toHaveLength(2);
-    expect(screen.getByRole('link', { name: /route-guide\.pdf/ })).toBeTruthy();
+    expect(screen.getByTitle('route-guide.pdf')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /route-guide\.pdf/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Continue learning' }));
     expect(onOpenLesson).toHaveBeenCalledWith(course.modules[0].lessons[0]);
+  });
+
+  it('shows course videos in an in-platform player without a download link', () => {
+    const courseWithVideo = {
+      ...course,
+      resources: [
+        ...course.resources,
+        { id: 'video-1', originalName: 'route-briefing.mp4', mimeType: 'video/mp4', lessonId: null },
+      ],
+    };
+    const { container } = renderPlayer({ course: courseWithVideo, selectedLesson: null });
+    const video = container.querySelector('video');
+
+    expect(video).toBeTruthy();
+    expect(video.getAttribute('src')).toBe('/api/resources/video-1/download');
+    expect(video.getAttribute('controlslist')).toBe('nodownload');
+    expect(screen.queryByRole('link', { name: /route-briefing\.mp4/ })).toBeNull();
   });
 
   it('navigates lessons, exposes completion state, and retries failed resume writes', () => {

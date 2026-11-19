@@ -101,7 +101,9 @@ function LessonVideo({ url }) {
   if (unavailable) {
     return <p className="lesson-resource-unavailable" role="note">This video could not be loaded. Contact your Tutor.</p>;
   }
-  return <video controls preload="metadata" src={url} onError={() => setUnavailable(true)}>Your browser cannot play this video.</video>;
+  return <video controls controlsList="nodownload" playsInline preload="metadata" src={url} onError={() => setUnavailable(true)}>
+    Your browser cannot play this video.
+  </video>;
 }
 
 function ContentBlock({ block, index, resources }) {
@@ -134,6 +136,19 @@ function ContentBlock({ block, index, resources }) {
     </figure>;
   }
   if (block.type === 'document') {
+    const isPdf = resource?.mimeType === 'application/pdf'
+      || (isHttpUrl(url) && /\.pdf(\?.*)?$/i.test(url));
+    if (hasUrl && isPdf) {
+      return <figure className="lesson-block lesson-block-media">
+        <iframe
+          className="lesson-resource-pdf"
+          title={block.title || resource?.originalName || 'Course PDF'}
+          src={`${url}#toolbar=0&navpanes=0`}
+          loading="lazy"
+        />
+        {block.caption && <figcaption>{block.caption}</figcaption>}
+      </figure>;
+    }
     return <p className="lesson-block">{hasUrl
       ? <a className="lesson-content-link" href={url} target="_blank" rel="noreferrer"><FileText size={16} /> {block.title || 'Open course document'}</a>
       : <span className="lesson-resource-unavailable" role="note">{unavailable ? 'This document is no longer available. Contact your Tutor.' : 'No document is available for this lesson.'}</span>}</p>;

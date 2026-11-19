@@ -1049,6 +1049,7 @@ body {
 .lesson-rich-text ul { margin: 0 0 10px; padding-left: 22px; }
 .lesson-block-media { display: grid; gap: 7px; }
 .lesson-block-media img, .lesson-block-media video { display: block; max-width: 100%; max-height: 540px; background: #10232c; }
+.lesson-block-media .lesson-resource-pdf { display: block; width: 100%; height: min(75vh, 760px); min-height: 480px; border: 1px solid #dfe5e4; background: #fff; }
 .lesson-block-media figcaption { color: var(--color-text-muted); font-size: 11px; }
 .lesson-content-link { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
 .lesson-exercise, .lesson-summary { padding: 14px 16px; border-left: 3px solid var(--color-accent); background: #f7f8f5; }
@@ -1152,12 +1153,19 @@ body {
 .student-course-tutor > div > span { display: grid; gap: 2px; min-width: 0; }
 .student-course-tutor strong { color: var(--color-primary); font-size: 11px; }
 .student-course-tutor small { overflow: hidden; color: var(--color-text-muted); font-size: 10px; text-overflow: ellipsis; }
-.student-player-resources { display: grid; gap: 8px; padding: 15px; border: 1px solid #e5ebe7; background: #fff; }
+.student-player-resources { display: grid; gap: 10px; padding: 15px; border: 1px solid #e5ebe7; background: #fff; }
 .student-course-overview-aside .student-player-resources { box-shadow: 0 5px 18px rgba(27,48,42,.04); }
 .student-player-resources h3 { margin: 0 0 3px; color: var(--color-primary); font-size: 12px; }
-.student-player-resources > a { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-top: 1px solid #eff2ef; color: var(--color-secondary); text-decoration: none; }
-.student-player-resources > a > span { display: grid; min-width: 0; gap: 3px; overflow-wrap: anywhere; font-size: 11px; font-weight: 650; }
-.student-player-resources small { color: var(--color-text-muted); font-size: 9px; font-weight: 400; }
+.student-player-resource-card { display: grid; gap: 10px; min-width: 0; padding: 11px; border: 1px solid #e5ebe7; border-radius: 9px; background: #fbfcfb; }
+.student-player-resource-heading { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--color-secondary); }
+.student-player-resource-heading > span { display: grid; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.student-player-resource-heading strong { color: var(--color-primary); font-size: 11px; }
+.student-player-resource-heading small { color: var(--color-text-muted); font-size: 9px; }
+.student-player-resource-pdf { display: block; width: 100%; height: min(72vh, 720px); min-height: 420px; border: 1px solid #dfe5e4; border-radius: 6px; background: #fff; }
+.student-player-resource-image { display: block; max-width: 100%; max-height: 540px; margin: 0 auto; object-fit: contain; }
+.student-player-resource-note { margin: 0; color: var(--color-text-muted); font-size: 10px; }
+.student-player-resource-note a { color: var(--color-secondary); font-weight: 700; }
+.student-course-overview-aside .student-player-resource-pdf { height: 420px; min-height: 320px; }
 .student-player { display: grid; gap: 12px; min-width: 0; }
 .student-player-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }
 .student-player-topbar > span { overflow: hidden; color: var(--color-text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
