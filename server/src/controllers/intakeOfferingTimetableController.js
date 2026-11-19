@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import prisma from '../config/database.js';
-import { env } from '../config/env.js';
 import { ok, fail } from '../utils/response.js';
 import { audit } from '../utils/audit.js';
 import { getObjectStorage, isObjectStorageEnabled } from '../services/objectStorage.js';
@@ -19,6 +18,8 @@ const timetableFileTypes = new Map([
   ['.csv', ['text/csv', 'application/vnd.ms-excel']],
 ]);
 
+const maxTimetableFileSizeBytes = 1024 * 1024 * 1024;
+
 const timetableUploadDetails = (body = {}) => {
   const originalName = path.posix.basename(String(body.originalName || '').replace(/\\/g, '/')).trim();
   const mimeType = body.mimeType;
@@ -30,8 +31,8 @@ const timetableUploadDetails = (body = {}) => {
     || typeof mimeType !== 'string'
     || !hasAllowedUploadType(timetableFileTypes, originalName, mimeType)
   ) return { error: 'Choose a PDF, Word, PowerPoint, or Excel timetable file', status: 400 };
-  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > env.maxFileSizeMb * 1024 * 1024) {
-    return { error: `File must be no larger than ${env.maxFileSizeMb} MB`, status: 413 };
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > maxTimetableFileSizeBytes) {
+    return { error: 'Timetable files must be no larger than 1 GB', status: 413 };
   }
   return { originalName, mimeType, sizeBytes };
 };
@@ -117,7 +118,67 @@ export const createOfferingTimetableUploadIntent = async (req, res) => {
   return ok(res, { mode: 's3', storageKey, ...intent });
 };
 
+const uploadOfferingTimetableToObjectStorage = async (req, res) => {
+  const file = req.file;
+  if (!file || !Buffer.isBuffer(file.buffer) || file.buffer.length !== file.size) {
+    return fail(res, 'No timetable file uploaded', 400);
+  }
+  const details = timetableUploadDetails({
+    originalName: file.originalname,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+  });
+  if (details.error) return fail(res, details.error, details.status);
+  if (!resourceFileMatchesType(file.buffer.subarray(0, 16), details.originalName, details.mimeType)) {
+    return fail(res, 'Choose a supported timetable file with matching file contents', 400);
+  }
+
+  const offering = await prisma.intakeProgramOffering.findFirst({
+    where: { id: req.params.offeringId, intakeId: req.params.id },
+    select: { id: true },
+  });
+  if (!offering) return fail(res, 'Program offering not found', 404);
+
+  const extension = path.extname(details.originalName).toLowerCase();
+  const storageKey = `program-offering-timetables/${req.user.id}/${randomUUID()}${extension}`;
+  const storage = getObjectStorage();
+  await storage.putObject({
+    key: storageKey,
+    body: file.buffer,
+    contentType: details.mimeType,
+    contentLength: details.sizeBytes,
+    metadata: {
+      'owner-id': req.user.id,
+      'expected-size': String(details.sizeBytes),
+    },
+  });
+
+  let timetable;
+  try {
+    timetable = await replaceOfferingTimetable(req.params.id, req.params.offeringId, {
+      ...details,
+      storagePath: storageKey,
+    });
+  } catch (error) {
+    try {
+      await storage.deleteObject(storageKey);
+    } catch (cleanupError) {
+      console.error('Could not remove unreferenced program offering timetable upload', cleanupError);
+    }
+    throw error;
+  }
+  if (!timetable) {
+    await storage.deleteObject(storageKey);
+    return fail(res, 'Program offering not found', 404);
+  }
+  await auditOfferingTimetableUpload(req, req.params.id, req.params.offeringId);
+  return ok(res, timetable, 'Timetable uploaded', 201);
+};
+
 export const uploadOfferingTimetable = async (req, res) => {
+  if (req.file?.buffer && isObjectStorageEnabled()) {
+    return uploadOfferingTimetableToObjectStorage(req, res);
+  }
   if (req.is('application/json')) {
     if (!isObjectStorageEnabled()) return fail(res, 'Object storage uploads are unavailable', 503);
     const details = timetableUploadDetails(req.body);

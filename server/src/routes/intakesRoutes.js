@@ -4,8 +4,9 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import * as timetable from '../controllers/intakeOfferingTimetableController.js';
-import { uploadResourceFile } from '../middleware/upload.js';
+import { uploadObjectStorageProxyFile, uploadResourceFile } from '../middleware/upload.js';
 import { env } from '../config/env.js';
+import { isObjectStorageEnabled } from '../services/objectStorage.js';
 
 const r = Router();
 r.use(authenticate);
@@ -22,6 +23,7 @@ r.post('/:id/offerings/:offeringId/timetable', (req, res, next) => {
   if (req.is('application/json')) {
     return asyncHandler(timetable.uploadOfferingTimetable)(req, res, next);
   }
+  if (isObjectStorageEnabled()) return uploadObjectStorageProxyFile(req, res, next);
   if (env.nodeEnv === 'production') {
     return res.status(503).json({ success: false, message: 'Use the secure object storage upload flow' });
   }

@@ -170,6 +170,66 @@ export const finalizeResourceUpload = async (req, res) => {
   return ok(res, resource, 'Uploaded', 201);
 };
 
+export const uploadResourceToObjectStorage = async (req, res) => {
+  const file = req.file;
+  if (!file || !Buffer.isBuffer(file.buffer) || file.buffer.length !== file.size) {
+    return fail(res, 'No file uploaded', 400);
+  }
+  const details = uploadDetails({
+    originalName: file.originalname,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+  });
+  if (details.error) return fail(res, details.error, details.status);
+  if (!resourceFileMatchesType(file.buffer.subarray(0, 16), details.originalName, details.mimeType)) {
+    return fail(res, 'The uploaded file content does not match its file type', 400);
+  }
+
+  const course = await resolveResourceCourse(req.body || {}, req.user);
+  if (course.error) return fail(res, course.error, course.status);
+
+  const extension = path.extname(details.originalName).toLowerCase();
+  const storageKey = `course-resources/${req.user.id}/${randomUUID()}${extension}`;
+  const storage = getObjectStorage();
+  await storage.putObject({
+    key: storageKey,
+    body: file.buffer,
+    contentType: details.mimeType,
+    contentLength: details.sizeBytes,
+    metadata: {
+      'owner-id': req.user.id,
+      'expected-size': String(details.sizeBytes),
+    },
+  });
+
+  let resource;
+  try {
+    resource = await createResourceRecord({
+      ...details,
+      courseId: course.courseId,
+      lessonId: req.body?.lessonId || null,
+      key: storageKey,
+      user: req.user,
+    });
+  } catch (error) {
+    try {
+      await storage.deleteObject(storageKey);
+    } catch (cleanupError) {
+      console.error('Could not remove unreferenced course upload', cleanupError);
+    }
+    throw error;
+  }
+
+  await audit({
+    actorId: req.user.id,
+    action: 'UPLOAD_RESOURCE',
+    entity: 'Resource',
+    entityId: resource.id,
+    ipAddress: req.ip,
+  });
+  return ok(res, resource, 'Uploaded', 201);
+};
+
 export const uploadResource = async (req, res) => {
   if (!req.file) return fail(res, 'No file uploaded', 400);
   if (!resourceFileMatchesType(readFileHeader(req.file.path), req.file.originalname, req.file.mimetype)) {

@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 process.env.JWT_SECRET ||= 'intakes-http-integration-secret';
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 
-const [{ default: app }, { default: prisma }, { signToken }] = await Promise.all([
+const [{ default: app }, { default: prisma }, { signToken }, { env }] = await Promise.all([
   import('../src/app.js'),
   import('../src/config/database.js'),
   import('../src/utils/jwt.js'),
+  import('../src/config/env.js'),
 ]);
 
 const admin = { id: 'admin-1', status: 'ACTIVE', role: { name: 'SUPER_ADMIN' } };
@@ -191,6 +192,45 @@ test('weekly timetable is saved on a program offering and invalid schedules are 
     });
     assert.equal(invalid.status, 400);
   } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('timetable uploads allow up to 1 GB and reject larger files', async () => {
+  const previousProvider = env.fileStorageProvider;
+  env.fileStorageProvider = 'local';
+  const restores = [
+    authRestore(),
+    stubMethod(prisma.intakeProgramOffering, 'findFirst', async () => ({ id: 'offering-1' })),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const uploadIntentPath = '/intakes/intake-1/offerings/offering-1/timetable/upload-intent';
+    const valid = await send(server, uploadIntentPath, {
+      method: 'POST',
+      body: {
+        originalName: 'schedule.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024 * 1024 * 1024,
+      },
+    });
+    assert.equal(valid.status, 200);
+    assert.equal((await valid.json()).data.mode, 'local');
+
+    const tooLarge = await send(server, uploadIntentPath, {
+      method: 'POST',
+      body: {
+        originalName: 'schedule.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: (1024 * 1024 * 1024) + 1,
+      },
+    });
+    assert.equal(tooLarge.status, 413);
+    assert.match((await tooLarge.json()).message, /no larger than 1 GB/i);
+  } finally {
+    env.fileStorageProvider = previousProvider;
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
   }

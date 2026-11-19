@@ -39,6 +39,11 @@ export const uploadResourceFile = createUploadMiddleware(
   createUploader(resourceTypes, env.maxFileSizeMb * 1024 * 1024),
 );
 
+// Keep proxied files below Vercel's request-body limit; larger files use signed storage uploads.
+export const uploadObjectStorageProxyFile = createUploadMiddleware(
+  createUploader(resourceTypes, 4 * 1024 * 1024, multer.memoryStorage()),
+);
+
 export const uploadAvatarFile = createUploadMiddleware(
   createUploader(avatarTypes, 5 * 1024 * 1024),
 );

@@ -67,6 +67,9 @@ const uploadWithStorageIntent = async ({
   });
 };
 
+// Keep proxied files below Vercel's request-body limit; larger files use signed storage uploads.
+const objectStorageProxyLimitBytes = 4 * 1024 * 1024;
+
 // Auth API methods
 export const authAPI = {
   // Get current user - called on mount, not repeatedly
@@ -274,6 +277,7 @@ export const resourcesAPI = {
     if (!file || typeof file.name !== 'string' || typeof file.size !== 'number') {
       throw new Error('Choose a file to upload');
     }
+    if (file.size <= objectStorageProxyLimitBytes) return api.post('/resources/', formData);
     return uploadWithStorageIntent({
       intentPath: '/resources/upload-intent',
       finalizePath: '/resources/',
@@ -310,6 +314,9 @@ export const intakesAPI = {
   uploadTimetable: async (id, offeringId, file) => {
     const localForm = new FormData();
     localForm.append('file', file);
+    if (file.size <= objectStorageProxyLimitBytes) {
+      return api.post(`/intakes/${id}/offerings/${offeringId}/timetable`, localForm);
+    }
     return uploadWithStorageIntent({
       intentPath: `/intakes/${id}/offerings/${offeringId}/timetable/upload-intent`,
       finalizePath: `/intakes/${id}/offerings/${offeringId}/timetable`,

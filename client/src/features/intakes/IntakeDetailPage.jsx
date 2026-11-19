@@ -473,7 +473,7 @@ export default function IntakeDetailPage() {
                       />
                     </label>
                     <span className="field-hint" id={`timetable-upload-help-${offering.id}`}>
-                      PDF, Word, PowerPoint, Excel or CSV; up to the configured upload limit.
+                      PDF, Word, PowerPoint, Excel or CSV; up to 1 GB.
                     </span>
                     <Button type="submit" size="sm" disabled={uploadingOfferingId !== null}>
                       <Upload size={15} /> {uploadingOfferingId === offering.id ? 'Uploading…' : 'Upload document'}
