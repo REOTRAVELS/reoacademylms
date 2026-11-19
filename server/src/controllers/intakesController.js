@@ -3,9 +3,21 @@ import { ok, fail } from '../utils/response.js';
 import { audit } from '../utils/audit.js';
 import { validateIntake, validateOfferingAcademicPeriod } from '../validators/intake.js';
 import { revalidateLiveClassAccess } from '../services/liveClassRealtime.js';
+import { ensureGeneratedOrdinaryClassesForOffering } from '../services/cohortTimetable.js';
+import { parseCohortSchedule } from '../utils/liveClassScheduling.js';
+import { cleanupOfferingTimetableFile } from './intakeOfferingTimetableController.js';
 
 const isPrismaError = (error, code) => error && typeof error === 'object' && error.code === code;
 const asDateInput = (date) => date.toISOString().slice(0, 10);
+const withoutTimetableStoragePath = (offering) => {
+  if (!offering) return offering;
+  const { timetableStoragePath, ...publicOffering } = offering;
+  return publicOffering;
+};
+const withoutTimetableStoragePaths = (intake) => ({
+  ...intake,
+  programOfferings: intake.programOfferings?.map(withoutTimetableStoragePath) || [],
+});
 
 const intakeWithOfferings = {
   programOfferings: {
@@ -72,14 +84,14 @@ const withStudentCounts = async (intakes, now = new Date()) => {
   }
   return intakes.map((intake) => {
     const counts = countsByIntake.get(intake.id);
-    return {
+    return withoutTimetableStoragePaths({
       ...intake,
       studentCounts: {
         approved: counts.approved.size,
         waiting: counts.waiting.size,
         eligible: counts.eligible.size,
       },
-    };
+    });
   });
 };
 
@@ -131,10 +143,10 @@ export const getIntake = async (req, res) => {
     ...offering,
     auditHistory: histories.get(offering.id).slice(0, 20),
   }));
-  return ok(res, {
+  return ok(res, withoutTimetableStoragePaths({
     ...withCounts[0],
     programOfferings,
-  });
+  }));
 };
 
 export const createIntake = async (req, res) => {
@@ -168,7 +180,16 @@ export const createIntake = async (req, res) => {
 export const updateIntake = async (req, res) => {
   const current = await prisma.intake.findUnique({
     where: { id: req.params.id },
-    include: { programOfferings: { select: { id: true, academicStartDate: true, academicEndDate: true } } },
+    include: {
+      programOfferings: {
+        select: {
+          id: true,
+          academicStartDate: true,
+          academicEndDate: true,
+          _count: { select: { cohorts: true } },
+        },
+      },
+    },
   });
   if (!current) return fail(res, 'Intake not found.', 404);
 
@@ -210,6 +231,13 @@ export const updateIntake = async (req, res) => {
       entityId: intake.id,
       ipAddress: req.ip,
     });
+    if (req.body?.timezone !== undefined || req.body?.status !== undefined) {
+      await Promise.all(current.programOfferings
+        .filter(({ _count }) => _count?.cohorts > 0)
+        .map(({ id }) => (
+          ensureGeneratedOrdinaryClassesForOffering(prisma, id)
+        )));
+    }
     await revalidateLiveClassAccess();
     return ok(res, intake, 'Intake updated.');
   } catch (error) {
@@ -294,7 +322,7 @@ export const addIntakeOfferings = async (req, res) => {
       })), status },
       ipAddress: req.ip,
     });
-    return ok(res, createdOfferings, 'Program offerings added.', 201);
+    return ok(res, createdOfferings.map(withoutTimetableStoragePath), 'Program offerings added.', 201);
   } catch (error) {
     if (isPrismaError(error, 'P2002')) return fail(res, 'One or more programmes are already offered in this intake.', 409);
     throw error;
@@ -302,19 +330,26 @@ export const addIntakeOfferings = async (req, res) => {
 };
 
 export const updateIntakeOffering = async (req, res) => {
-  const { status } = req.body || {};
+  const { status, schedule } = req.body || {};
   if (status !== undefined && !['ACTIVE', 'INACTIVE'].includes(status)) {
     return fail(res, 'Offering status must be Active or Inactive.', 400);
   }
-  if (!req.body || Object.keys(req.body).some((field) => !['status', 'academicStartDate', 'academicEndDate'].includes(field))
+  if (!req.body || Object.keys(req.body).some((field) => !['status', 'academicStartDate', 'academicEndDate', 'schedule'].includes(field))
     || Object.keys(req.body).length === 0) {
-    return fail(res, 'Provide offering status or academic dates to update.', 400);
+    return fail(res, 'Provide offering status, academic dates, or weekly timetable to update.', 400);
+  }
+  if (schedule !== undefined && schedule !== null && schedule !== '') {
+    const parsedSchedule = parseCohortSchedule(schedule);
+    if (typeof schedule !== 'string' || !parsedSchedule.days.length || parsedSchedule.startMinutes === null) {
+      return fail(res, 'Choose at least one weekday and a valid class time for the timetable.', 400);
+    }
   }
   const offering = await prisma.intakeProgramOffering.findFirst({
     where: { id: req.params.offeringId, intakeId: req.params.id },
     include: {
       intake: { select: { status: true, season: true, year: true, timezone: true } },
       programme: { select: { status: true } },
+      _count: { select: { cohorts: true } },
     },
   });
   if (!offering) return fail(res, 'Program offering not found.', 404);
@@ -335,6 +370,10 @@ export const updateIntakeOffering = async (req, res) => {
   }
   const metadata = { intakeId: req.params.id };
   if (status !== undefined) metadata.status = status;
+  if (schedule !== undefined) {
+    metadata.previousSchedule = offering.schedule || null;
+    metadata.schedule = schedule || null;
+  }
   if (Object.keys(dateData).length) {
     metadata.previousAcademicStartDate = offering.academicStartDate.toISOString();
     metadata.academicStartDate = dateData.academicStartDate.toISOString();
@@ -343,7 +382,11 @@ export const updateIntakeOffering = async (req, res) => {
   }
   const updated = await prisma.intakeProgramOffering.update({
     where: { id: offering.id },
-    data: { ...dateData, ...(status !== undefined ? { status } : {}) },
+    data: {
+      ...dateData,
+      ...(status !== undefined ? { status } : {}),
+      ...(schedule !== undefined ? { schedule: schedule || null } : {}),
+    },
     include: { programme: true, _count: { select: { cohorts: true, applications: true, programEnrollments: true, assessments: true } } },
   });
   await audit({
@@ -354,8 +397,14 @@ export const updateIntakeOffering = async (req, res) => {
     metadata,
     ipAddress: req.ip,
   });
+  if (
+    offering._count?.cohorts > 0
+    && (status !== undefined || schedule !== undefined || Object.keys(dateData).length)
+  ) {
+    await ensureGeneratedOrdinaryClassesForOffering(prisma, offering.id);
+  }
   await revalidateLiveClassAccess();
-  return ok(res, updated, 'Program offering updated.');
+  return ok(res, withoutTimetableStoragePath(updated), 'Program offering updated.');
 };
 
 export const removeIntakeOffering = async (req, res) => {
@@ -380,6 +429,11 @@ export const removeIntakeOffering = async (req, res) => {
       return fail(res, 'This offering has academic or admissions records and cannot be removed. Deactivate it instead.', 409);
     }
     throw error;
+  }
+  try {
+    await cleanupOfferingTimetableFile(offering.timetableStoragePath);
+  } catch (error) {
+    console.error('Could not remove timetable file for deleted program offering', error);
   }
   await audit({
     actorId: req.user.id,

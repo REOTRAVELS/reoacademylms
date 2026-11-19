@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureGeneratedOrdinaryClasses } from '../src/services/cohortTimetable.js';
 
-test('cohort timetable generation is idempotent and batches new sessions', async () => {
+test('program offering timetable generation is idempotent and batches new sessions', async () => {
   const generatedClasses = [];
   const batches = [];
   const database = {
@@ -10,11 +10,15 @@ test('cohort timetable generation is idempotent and batches new sessions', async
       findMany: async () => [{
         id: 'cohort-1',
         name: 'Winter cohort',
-        schedule: 'Mon 09:00-10:00',
-        startDate: null,
-        endDate: null,
+        schedule: 'Fri 18:00-19:00',
         status: 'ACTIVE',
-        intakeProgramOffering: null,
+        intakeProgramOffering: {
+          schedule: 'Mon 09:00-10:00',
+          academicStartDate: null,
+          academicEndDate: null,
+          status: 'ACTIVE',
+          intake: { timezone: 'UTC', status: 'ACTIVE' },
+        },
         courses: [{
           courseId: 'course-1',
           course: { id: 'course-1', title: 'Customer Relations', trainers: [] },
@@ -46,5 +50,6 @@ test('cohort timetable generation is idempotent and batches new sessions', async
   assert.equal(batches.length, 1);
   assert.ok(batches[0].length > 0);
   assert.ok(batches[0].every(({ cohortId, courseId }) => cohortId === 'cohort-1' && courseId === 'course-1'));
+  assert.ok(batches[0].every(({ description }) => description.includes('Mon 09:00-10:00')));
   assert.equal(generatedClasses.length, batches[0].length);
 });

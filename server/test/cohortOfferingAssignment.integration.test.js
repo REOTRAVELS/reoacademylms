@@ -47,9 +47,14 @@ const send = (server, { user = admin, offeringId = 'offering-1' } = {}) => fetch
 test('administrator explicitly links an existing cohort to a matching offering without changing members', async () => {
   let offeringQuery;
   let updateArgs;
+  let timetableQuery;
   const restores = [
     stubMethod(prisma.user, 'findUnique', async ({ where }) => (where.id === admin.id ? admin : trainer)),
     stubMethod(prisma.cohort, 'findUnique', async () => ({ id: 'cohort-1', programmeId: 'programme-1' })),
+    stubMethod(prisma.cohort, 'findMany', async (args) => {
+      timetableQuery = args;
+      return [];
+    }),
     stubMethod(prisma.intakeProgramOffering, 'findFirst', async (args) => {
       offeringQuery = args;
       return { id: 'offering-1' };
@@ -76,6 +81,7 @@ test('administrator explicitly links an existing cohort to a matching offering w
       where: { id: 'cohort-1' },
       data: { intakeProgramOfferingId: 'offering-1' },
     });
+    assert.deepEqual(timetableQuery.where, { id: 'cohort-1' });
   } finally {
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());

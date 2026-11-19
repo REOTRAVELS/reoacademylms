@@ -151,6 +151,72 @@ test('program date updates interpret local time in the intake timezone and audit
   }
 });
 
+test('weekly timetable is saved on a program offering and invalid schedules are rejected', async () => {
+  const offering = {
+    id: 'offering-1',
+    schedule: null,
+    timetableStoragePath: 'private/timetable.pdf',
+    academicStartDate: new Date('2027-01-15T00:00:00.000Z'),
+    academicEndDate: new Date('2027-03-31T00:00:00.000Z'),
+    intake: { status: 'ACTIVE', season: 'WINTER', year: 2027, timezone: 'UTC' },
+    programme: { status: 'ACTIVE' },
+    _count: { cohorts: 0 },
+  };
+  let updatedData;
+  const restores = [
+    authRestore(),
+    stubMethod(prisma.intakeProgramOffering, 'findFirst', async () => offering),
+    stubMethod(prisma.intakeProgramOffering, 'update', async ({ data }) => {
+      updatedData = data;
+      return { ...offering, ...data };
+    }),
+    stubMethod(prisma.auditLog, 'create', async () => ({ id: 'audit-1' })),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const saved = await send(server, '/intakes/intake-1/offerings/offering-1', {
+      method: 'PATCH',
+      body: { schedule: 'Mon, Wed 09:00-10:30' },
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(updatedData.schedule, 'Mon, Wed 09:00-10:30');
+    const responseData = (await saved.json()).data;
+    assert.equal(responseData.schedule, 'Mon, Wed 09:00-10:30');
+    assert.equal('timetableStoragePath' in responseData, false);
+
+    const invalid = await send(server, '/intakes/intake-1/offerings/offering-1', {
+      method: 'PATCH',
+      body: { schedule: 'Mon 24:00-25:00' },
+    });
+    assert.equal(invalid.status, 400);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('active students can access the offering timetable endpoint', async () => {
+  const student = { id: 'student-1', status: 'ACTIVE', role: { name: 'STUDENT' } };
+  const restores = [
+    authRestore(student),
+    stubMethod(prisma.intakeProgramOffering, 'findFirst', async () => ({
+      id: 'offering-1',
+      timetableStoragePath: null,
+    })),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/intakes/intake-1/offerings/offering-1/timetable', { user: student });
+    assert.equal(response.status, 404);
+    assert.match((await response.json()).message, /timetable not found/i);
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+  }
+});
+
 test('intake registration can be controlled independently of program start dates', async () => {
   const current = {
     id: 'intake-1',

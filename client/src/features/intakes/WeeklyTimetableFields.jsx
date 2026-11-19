@@ -27,7 +27,7 @@ const formatSchedule = (selectedDays, startTime, endTime) => (
   selectedDays.length ? `${days.filter(({ name }) => selectedDays.includes(name)).map(({ name }) => name).join(', ')} ${startTime}-${endTime}` : ''
 );
 
-export default function CohortTimetableFields({ schedule = '', onChange, timezone = 'UTC' }) {
+export default function WeeklyTimetableFields({ schedule = '', onChange, timezone = 'UTC' }) {
   const parsed = useMemo(() => parseSchedule(schedule), [schedule]);
   const invalidDuration = parsed.endTime <= parsed.startTime;
 

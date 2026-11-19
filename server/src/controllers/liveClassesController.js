@@ -29,7 +29,15 @@ import {
 
 const classIncludes = {
   course: { select: { id: true, title: true } },
-  cohort: { select: { id: true, name: true, timetableFileName: true } },
+  cohort: {
+    select: {
+      id: true,
+      name: true,
+      intakeProgramOffering: {
+        select: { id: true, intakeId: true, timetableFileName: true },
+      },
+    },
+  },
 };
 
 const getManagedClass = async (id, user) => {

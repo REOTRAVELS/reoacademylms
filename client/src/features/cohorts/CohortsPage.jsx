@@ -8,7 +8,6 @@ import DataTable from '../../components/tables/DataTable';
 import { statusLabel } from '../../components/common/navConfig';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import CohortTimetableFields from './CohortTimetableFields';
 
 export default function CohortsPage() {
   const { user } = useAuth();
@@ -22,7 +21,7 @@ export default function CohortsPage() {
   const [offeringSelections, setOfferingSelections] = useState({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [form, setForm] = useState({ name: '', programmeId: '', intakeProgramOfferingId: '', status: 'PLANNED', startDate: '', endDate: '', schedule: '' });
+  const [form, setForm] = useState({ name: '', programmeId: '', intakeProgramOfferingId: '', status: 'PLANNED' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,14 +59,9 @@ export default function CohortsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const timeRange = form.schedule.match(/(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (timeRange && timeRange[2] <= timeRange[1]) {
-      setError('Class end time must be after its start time.');
-      return;
-    }
     try {
       await cohortsAPI.create(form);
-      setForm({ name: '', programmeId: '', intakeProgramOfferingId: '', status: 'PLANNED', startDate: '', endDate: '', schedule: '' });
+      setForm({ name: '', programmeId: '', intakeProgramOfferingId: '', status: 'PLANNED' });
       setShowForm(false);
       setError('');
       setNotice('Cohort created.');
@@ -164,8 +158,6 @@ export default function CohortsPage() {
     }] : []),
     { key: 'status', label: 'Status', render: (r) => <span className={`badge ${r.status.toLowerCase()}`}>{statusLabel(r.status)}</span> },
     { key: 'enrolments', label: 'Learners', render: (r) => r._count?.enrolments || 0 },
-    { key: 'startDate', label: 'Start', render: (r) => r.startDate ? new Date(r.startDate).toLocaleDateString() : '—' },
-    { key: 'endDate', label: 'End', render: (r) => r.endDate ? new Date(r.endDate).toLocaleDateString() : '—' },
     { key: 'actions', label: isAdmin ? 'Actions' : 'Details', render: (r) => <div className="table-actions">
       <Link className="btn btn-ghost btn-sm" to={`/cohorts/${r.id}`}>Manage</Link>
       {isAdmin && <>
@@ -208,15 +200,6 @@ export default function CohortsPage() {
                   value: offering.id,
                   label: `GATE ${String(offering.intake.gateNumber).padStart(2, '0')} · ${offering.intake.season} ${offering.intake.year}`,
                 }))}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <Input label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
-              <Input label="End Date" type="date" value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} />
-            </div>
-            <CohortTimetableFields
-              schedule={form.schedule}
-              timezone={programOfferings.find((offering) => offering.id === form.intakeProgramOfferingId)?.intake.timezone}
-              onChange={(schedule) => setForm((current) => ({ ...current, schedule }))}
             />
             <Select label="Status" value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={[{ value: 'PLANNED', label: 'Planned' }, { value: 'ACTIVE', label: 'Active' }, { value: 'COMPLETED', label: 'Completed' }, { value: 'ARCHIVED', label: 'Archived' }]} />
             <Button type="submit" variant="primary">Create Cohort</Button>

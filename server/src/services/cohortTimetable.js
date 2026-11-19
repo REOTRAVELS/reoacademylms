@@ -5,16 +5,25 @@ import {
   parseCohortSchedule,
 } from '../utils/liveClassScheduling.js';
 
-const generatedDescriptionPrefix = 'Automatically generated from the cohort timetable (';
+const generatedDescriptionPrefixes = [
+  'Automatically generated from the cohort timetable (',
+  'Automatically generated from the program offering timetable (',
+];
 const defaultScheduleDurationMs = 12 * 7 * 24 * 60 * 60_000;
 let synchronizationQueue = Promise.resolve();
 
-const synchronizeOrdinaryClasses = async (database, cohortId) => {
+const synchronizeOrdinaryClasses = async (database, { cohortId, offeringId } = {}) => {
   const cohorts = await database.cohort.findMany({
-    where: cohortId ? { id: cohortId } : {},
+    where: cohortId ? { id: cohortId } : offeringId ? { intakeProgramOfferingId: offeringId } : {},
     include: {
       intakeProgramOffering: {
-        select: { intake: { select: { timezone: true } } },
+        select: {
+          schedule: true,
+          academicStartDate: true,
+          academicEndDate: true,
+          status: true,
+          intake: { select: { timezone: true, status: true } },
+        },
       },
       courses: {
         include: {
@@ -27,16 +36,25 @@ const synchronizeOrdinaryClasses = async (database, cohortId) => {
 
   for (const cohort of cohorts) {
     const now = new Date();
-    const timezone = cohort.intakeProgramOffering?.intake.timezone || 'UTC';
-    const scheduleMeta = parseCohortSchedule(cohort.schedule);
-    const rangeEnd = cohort.endDate || new Date(now.getTime() + defaultScheduleDurationMs);
-    const rangeEndInclusive = cohort.endDate
+    const offering = cohort.intakeProgramOffering;
+    const timezone = offering?.intake.timezone || 'UTC';
+    const scheduleMeta = parseCohortSchedule(offering?.schedule);
+    const rangeEnd = offering?.academicEndDate || new Date(now.getTime() + defaultScheduleDurationMs);
+    const rangeEndInclusive = offering?.academicEndDate
       ? new Date(rangeEnd.getTime() + 24 * 60 * 60_000 - 1)
       : rangeEnd;
-    const occurrences = cohort.status !== 'ARCHIVED' && scheduleMeta.days.length && scheduleMeta.startMinutes !== null
+    const occurrences = (
+      cohort.status !== 'ARCHIVED'
+      && offering?.status === 'ACTIVE'
+      && !['COMPLETED', 'ARCHIVED'].includes(offering.intake.status)
+      && scheduleMeta.days.length
+      && scheduleMeta.startMinutes !== null
+    )
       ? generateRecurringClassDates({
-        schedule: cohort.schedule,
-        startDate: cohort.startDate && cohort.startDate > now ? cohort.startDate : now,
+        schedule: offering.schedule,
+        startDate: offering.academicStartDate && offering.academicStartDate > now
+          ? offering.academicStartDate
+          : now,
         endDate: rangeEnd,
         timezone,
       })
@@ -50,18 +68,22 @@ const synchronizeOrdinaryClasses = async (database, cohortId) => {
         status: { not: 'CANCELLED' },
         startsAt: { gte: now },
         OR: [
-          { description: { startsWith: generatedDescriptionPrefix } },
+          ...generatedDescriptionPrefixes.map((prefix) => ({ description: { startsWith: prefix } })),
           { startsAt: { lte: rangeEndInclusive } },
         ],
       },
-      select: { id: true, courseId: true, startsAt: true, status: true, description: true },
+      select: { id: true, courseId: true, startsAt: true, status: true, description: true, durationMins: true },
     });
     const activeCourseIds = new Set(cohort.courses.map(({ courseId }) => courseId));
     const obsoleteIds = existingClasses
-      .filter(({ courseId, startsAt, status, description }) => (
+      .filter(({ courseId, startsAt, status, description, durationMins }) => (
         status === 'SCHEDULED'
-        && description?.startsWith(generatedDescriptionPrefix)
-        && (!activeCourseIds.has(courseId) || !occurrenceKeys.has(startsAt.toISOString()))
+        && generatedDescriptionPrefixes.some((prefix) => description?.startsWith(prefix))
+        && (
+          !activeCourseIds.has(courseId)
+          || !occurrenceKeys.has(startsAt.toISOString())
+          || scheduleMeta.durationMins !== durationMins
+        )
       ))
       .map(({ id }) => id);
     if (obsoleteIds.length) {
@@ -100,7 +122,7 @@ const synchronizeOrdinaryClasses = async (database, cohortId) => {
           cohortId: cohort.id,
           createdById: createdBy.id,
           title: `${course.title} · ${cohort.name}`,
-          description: `${generatedDescriptionPrefix}${cohort.schedule}).`,
+          description: `${generatedDescriptionPrefixes[1]}${offering.schedule}).`,
           roomName: `reo-${randomUUID()}`,
           startsAt,
           durationMins: scheduleMeta.durationMins || 60,
@@ -113,8 +135,16 @@ const synchronizeOrdinaryClasses = async (database, cohortId) => {
   }
 };
 
-export const ensureGeneratedOrdinaryClasses = (database = prisma, cohortId) => {
-  const synchronization = synchronizationQueue.then(() => synchronizeOrdinaryClasses(database, cohortId));
+const queueSynchronization = (database, filters) => {
+  const synchronization = synchronizationQueue.then(() => synchronizeOrdinaryClasses(database, filters));
   synchronizationQueue = synchronization.catch(() => {});
   return synchronization;
 };
+
+export const ensureGeneratedOrdinaryClasses = (database = prisma, cohortId) => (
+  queueSynchronization(database, cohortId ? { cohortId } : {})
+);
+
+export const ensureGeneratedOrdinaryClassesForOffering = (database = prisma, offeringId) => (
+  queueSynchronization(database, { offeringId })
+);

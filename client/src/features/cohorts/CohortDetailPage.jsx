@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Download, GraduationCap, Plus, Trash2, Upload, UsersRound } from 'lucide-react';
+import { ArrowLeft, BookOpen, GraduationCap, Plus, Trash2, UsersRound } from 'lucide-react';
 import { cohortsAPI, coursesAPI, usersAPI } from '../../services/api';
 import { statusClass, statusLabel } from '../../components/common/navConfig';
 import { Button } from '../../components/common/Button';
 import { Select } from '../../components/forms/Input';
 import { useAuth } from '../../hooks/useAuth';
-import CohortTimetableFields from './CohortTimetableFields';
 
 export default function CohortDetailPage() {
   const { id } = useParams();
@@ -20,10 +19,6 @@ export default function CohortDetailPage() {
   const [studentId, setStudentId] = useState('');
   const [trainerId, setTrainerId] = useState('');
   const [courseId, setCourseId] = useState('');
-  const [schedule, setSchedule] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [uploadingTimetable, setUploadingTimetable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -34,9 +29,6 @@ export default function CohortDetailPage() {
     try {
       const { data } = await cohortsAPI.get(id);
       setCohort(data.data);
-      setSchedule(data.data.schedule || '');
-      setStartDate(data.data.startDate ? data.data.startDate.slice(0, 10) : '');
-      setEndDate(data.data.endDate ? data.data.endDate.slice(0, 10) : '');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not load this cohort.');
     } finally {
@@ -70,46 +62,6 @@ export default function CohortDetailPage() {
     }
   };
 
-  const saveTimetable = async (event) => {
-    event.preventDefault();
-    const timeRange = schedule.match(/(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (timeRange && timeRange[2] <= timeRange[1]) {
-      setError('Class end time must be after its start time.');
-      return;
-    }
-    if (startDate && endDate && startDate > endDate) {
-      setError('The timetable end date must be on or after its start date.');
-      return;
-    }
-    await applyAction(
-      () => cohortsAPI.update(id, { schedule, startDate: startDate || null, endDate: endDate || null }),
-      'Timetable updated. Upcoming class sessions have been refreshed.',
-    );
-  };
-
-  const uploadTimetable = async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const file = form.elements.timetable.files?.[0];
-    if (!file) {
-      setError('Choose a timetable document to upload.');
-      return;
-    }
-    setUploadingTimetable(true);
-    setError('');
-    setNotice('');
-    try {
-      await cohortsAPI.uploadTimetable(id, file);
-      form.reset();
-      setNotice('Timetable document uploaded.');
-      await loadCohort();
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not upload the timetable document.');
-    } finally {
-      setUploadingTimetable(false);
-    }
-  };
-
   if (loading) return <div className="card loading-card">Opening cohort…</div>;
   if (!cohort) return <div className="page-stack"><div className="notice notice-error">{error || 'Cohort not found.'}</div><Link className="btn btn-secondary" to="/cohorts"><ArrowLeft size={16} /> Back to cohorts</Link></div>;
 
@@ -121,7 +73,7 @@ export default function CohortDetailPage() {
     <div className="page-stack">
       <Link className="back-link" to="/cohorts"><ArrowLeft size={16} /> All cohorts</Link>
       <section className="cohort-hero">
-        <div><span className="eyebrow eyebrow-light">{cohort.programme?.title || 'Programme'}</span><h1>{cohort.name}</h1><p>{cohort.schedule || 'Programme learning cohort'}</p></div>
+        <div><span className="eyebrow eyebrow-light">{cohort.programme?.title || 'Programme'}</span><h1>{cohort.name}</h1><p>{cohort.intakeProgramOffering?.intake ? `GATE ${String(cohort.intakeProgramOffering.intake.gateNumber).padStart(2, '0')} · ${cohort.intakeProgramOffering.intake.season} ${cohort.intakeProgramOffering.intake.year}` : 'Programme learning cohort'}</p></div>
         <span className={statusClass(cohort.status)}>{statusLabel(cohort.status)}</span>
       </section>
       {notice && <div className="notice notice-success">{notice}</div>}
@@ -132,42 +84,6 @@ export default function CohortDetailPage() {
         <div className="stat-card"><span className="stat-icon stat-icon-violet"><UsersRound size={19} /></span><span className="stat-copy"><span className="stat-label">Assigned trainers</span><strong className="stat-value">{cohort.trainers.length}</strong></span></div>
         <div className="stat-card"><span className="stat-icon stat-icon-teal"><BookOpen size={19} /></span><span className="stat-copy"><span className="stat-label">Courses</span><strong className="stat-value">{cohort.courses.length}</strong></span></div>
       </div>
-
-      {isAdmin && <section className="card cohort-section">
-        <div className="card-heading"><div><span className="eyebrow">Weekly timetable</span><h2>Class days and time</h2></div></div>
-        <form className="cohort-timetable-form" onSubmit={saveTimetable}>
-          <div className="timetable-times">
-            <label className="form-field"><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-            <label className="form-field"><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-          </div>
-          <CohortTimetableFields
-            schedule={schedule}
-            timezone={cohort.intakeProgramOffering?.intake?.timezone}
-            onChange={setSchedule}
-          />
-          <Button type="submit">Save timetable</Button>
-        </form>
-        <form className="cohort-timetable-upload" onSubmit={uploadTimetable}>
-          <label className="form-field">
-            <span>Upload timetable document</span>
-            <input
-              type="file"
-              name="timetable"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv"
-              aria-describedby="timetable-upload-help"
-            />
-          </label>
-          <span className="field-hint" id="timetable-upload-help">PDF, Word, PowerPoint or Excel; up to the configured upload limit.</span>
-          <Button type="submit" disabled={uploadingTimetable}>
-            <Upload size={15} /> {uploadingTimetable ? 'Uploading…' : 'Upload document'}
-          </Button>
-          {cohort.timetableFileName && (
-            <a href={cohortsAPI.timetableDownloadUrl(id)} target="_blank" rel="noreferrer">
-              <Download size={15} /> {cohort.timetableFileName}
-            </a>
-          )}
-        </form>
-      </section>}
 
       <div className="cohort-detail-grid">
         <section className="card cohort-section">

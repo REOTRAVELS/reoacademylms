@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { cohortsAPI, liveClassesAPI } from '../../services/api';
+import { intakesAPI, liveClassesAPI } from '../../services/api';
 import { Button } from '../../components/common/Button';
 
 const viewOptions = ['DAY', 'WEEK', 'MONTH', 'AGENDA'];
@@ -50,8 +50,11 @@ function EventItem({ liveClass, onExport, now }) {
       <small>{details}</small>
       <div className="calendar-event-actions">
         {isJoinable(liveClass, now) && <Link className="btn btn-sm btn-primary" to={`/live-classes/${liveClass.id}/room`}>Join class</Link>}
-        {liveClass.cohort?.timetableFileName && (
-          <a className="btn btn-sm btn-secondary" href={cohortsAPI.timetableDownloadUrl(liveClass.cohort.id)} target="_blank" rel="noreferrer">
+        {liveClass.cohort?.intakeProgramOffering?.timetableFileName && (
+          <a className="btn btn-sm btn-secondary" href={intakesAPI.timetableDownloadUrl(
+            liveClass.cohort.intakeProgramOffering.intakeId,
+            liveClass.cohort.intakeProgramOffering.id,
+          )} target="_blank" rel="noreferrer">
             Timetable document
           </a>
         )}
@@ -171,8 +174,11 @@ export default function CalendarPage() {
                   <strong>{liveClass.title}</strong>
                   <span>{formatTime(startsAt)} · {liveClass.durationMins} min</span>
                   {isJoinable(liveClass, now) && <Link to={`/live-classes/${liveClass.id}/room`}>Join class</Link>}
-                  {liveClass.cohort?.timetableFileName && (
-                    <a href={cohortsAPI.timetableDownloadUrl(liveClass.cohort.id)} target="_blank" rel="noreferrer">Timetable document</a>
+                  {liveClass.cohort?.intakeProgramOffering?.timetableFileName && (
+                    <a href={intakesAPI.timetableDownloadUrl(
+                      liveClass.cohort.intakeProgramOffering.intakeId,
+                      liveClass.cohort.intakeProgramOffering.id,
+                    )} target="_blank" rel="noreferrer">Timetable document</a>
                   )}
                   <Button size="sm" variant="secondary" onClick={() => exportCalendar(liveClass)}>Export .ics</Button>
                 </article>

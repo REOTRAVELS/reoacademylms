@@ -31,7 +31,13 @@ export const listOpenOfferings = async (now = new Date()) => {
       academicStartDate: { gt: now },
       programme: { status: 'ACTIVE' },
     },
-    include: {
+    select: {
+      id: true,
+      intakeId: true,
+      programmeId: true,
+      academicStartDate: true,
+      academicEndDate: true,
+      status: true,
       programme: { select: { id: true, title: true, qualificationType: true, status: true } },
       intake: {
         select: {

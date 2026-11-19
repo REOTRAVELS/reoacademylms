@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarRange, Plus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarRange, Download, Plus, ToggleLeft, ToggleRight, Trash2, Upload } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input, Select } from '../../components/forms/Input';
 import { statusClass, statusLabel } from '../../components/common/navConfig';
 import { intakesAPI, programmesAPI } from '../../services/api';
 import { validateIntakePeriod } from './intakeValidation';
 import { formatIntakeDate, formatIntakeStart, toDateTimeLocal } from './intakeDateTime';
+import WeeklyTimetableFields from './WeeklyTimetableFields';
 
 const seasonLabels = { WINTER: 'WINTER', SPRING: 'SPRING', SUMMER: 'SUMMER', FALL: 'FALL' };
 const intakeStatuses = [
@@ -38,6 +39,9 @@ export default function IntakeDetailPage() {
   const [offeringStatus, setOfferingStatus] = useState('ACTIVE');
   const [editingOfferingId, setEditingOfferingId] = useState(null);
   const [offeringEditForm, setOfferingEditForm] = useState(null);
+  const [editingTimetableId, setEditingTimetableId] = useState(null);
+  const [timetableSchedule, setTimetableSchedule] = useState('');
+  const [uploadingOfferingId, setUploadingOfferingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -165,6 +169,43 @@ export default function IntakeDetailPage() {
     if (updated) {
       setEditingOfferingId(null);
       setOfferingEditForm(null);
+    }
+  };
+
+  const startEditingTimetable = (offering) => {
+    setEditingTimetableId(offering.id);
+    setTimetableSchedule(offering.schedule || '');
+  };
+
+  const saveOfferingTimetable = async (event, offering) => {
+    event.preventDefault();
+    const updated = await runAction(
+      () => intakesAPI.updateOffering(id, offering.id, { schedule: timetableSchedule || null }),
+      'Program timetable updated. Upcoming class sessions have been refreshed.',
+    );
+    if (updated) setEditingTimetableId(null);
+  };
+
+  const uploadOfferingTimetable = async (event, offering) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = form.elements.timetable.files?.[0];
+    if (!file) {
+      setError('Choose a timetable document to upload.');
+      return;
+    }
+    setUploadingOfferingId(offering.id);
+    setError('');
+    setNotice('');
+    try {
+      await intakesAPI.uploadTimetable(id, offering.id, file);
+      form.reset();
+      setNotice('Program timetable document uploaded.');
+      await load();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not upload the program timetable document.');
+    } finally {
+      setUploadingOfferingId(null);
     }
   };
 
@@ -391,6 +432,63 @@ export default function IntakeDetailPage() {
                     </details>
                   )}
                 </div>
+                <details className="intake-offering-timetable">
+                  <summary>Weekly timetable and document</summary>
+                  <p className="field-hint">
+                    This schedule applies to courses in cohorts assigned to this program offering. Class dates follow the program’s academic dates and the intake timezone ({intake.timezone}).
+                  </p>
+                  {editingTimetableId === offering.id ? (
+                    <form className="intake-form" onSubmit={(event) => saveOfferingTimetable(event, offering)}>
+                      <WeeklyTimetableFields
+                        schedule={timetableSchedule}
+                        timezone={intake.timezone}
+                        onChange={setTimetableSchedule}
+                      />
+                      <div className="intake-form-actions">
+                        <Button type="submit" size="sm">Save timetable</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingTimetableId(null)}>Cancel</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="intake-offering-timetable-current">
+                      <span>{offering.schedule || 'No weekly class schedule configured.'}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEditingTimetable(offering)}
+                        disabled={editingTimetableId !== null}
+                      >
+                        Edit weekly timetable
+                      </Button>
+                    </div>
+                  )}
+                  <form className="intake-offering-timetable-upload" onSubmit={(event) => uploadOfferingTimetable(event, offering)}>
+                    <label className="form-field">
+                      <span>Upload timetable document</span>
+                      <input
+                        type="file"
+                        name="timetable"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv"
+                        aria-describedby={`timetable-upload-help-${offering.id}`}
+                      />
+                    </label>
+                    <span className="field-hint" id={`timetable-upload-help-${offering.id}`}>
+                      PDF, Word, PowerPoint, Excel or CSV; up to the configured upload limit.
+                    </span>
+                    <Button type="submit" size="sm" disabled={uploadingOfferingId !== null}>
+                      <Upload size={15} /> {uploadingOfferingId === offering.id ? 'Uploading…' : 'Upload document'}
+                    </Button>
+                    {offering.timetableFileName && (
+                      <a
+                        href={intakesAPI.timetableDownloadUrl(id, offering.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download size={15} /> {offering.timetableFileName}
+                      </a>
+                    )}
+                  </form>
+                </details>
                 <span className={statusClass(offering.status)}>{statusLabel(offering.status)}</span>
                 <div className="table-actions">
                   <Button

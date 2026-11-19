@@ -76,6 +76,12 @@ const applyOfferingInclude = (offering, include) => ({
   programme: projectSelectedFields(offering.programme, include.programme.select),
 });
 
+const applyOfferingSelect = (offering, select) => ({
+  ...projectSelectedFields(offering, select),
+  intake: projectSelectedFields(offering.intake, select.intake.select),
+  programme: projectSelectedFields(offering.programme, select.programme.select),
+});
+
 test('future intakes accept applications until the academic start time and can be manually locked', () => {
   const offering = {
     status: 'ACTIVE',
@@ -99,13 +105,15 @@ test('signup listing selects all fields needed to verify offering eligibility', 
   const now = new Date('2026-11-17T12:00:00.000Z');
   const offering = openOffering();
   offering.academicStartDate = new Date('2027-01-15T09:30:00.000Z');
-  const restore = stubMethod(prisma.intakeProgramOffering, 'findMany', async ({ include }) => [
-    applyOfferingInclude(offering, include),
+  offering.timetableStoragePath = 'private/timetable.pdf';
+  const restore = stubMethod(prisma.intakeProgramOffering, 'findMany', async ({ select }) => [
+    applyOfferingSelect(offering, select),
   ]);
   try {
     const offerings = await listOpenOfferings(now);
     assert.equal(offerings.length, 1);
     assert.equal(offerings[0].id, offering.id);
+    assert.equal('timetableStoragePath' in offerings[0], false);
   } finally {
     restore();
   }

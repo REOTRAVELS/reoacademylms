@@ -307,6 +307,18 @@ export const intakesAPI = {
     api.post(`/intakes/${id}/offerings`, { offerings, status }),
   updateOffering: async (id, offeringId, updates) =>
     api.patch(`/intakes/${id}/offerings/${offeringId}`, updates),
+  uploadTimetable: async (id, offeringId, file) => {
+    const localForm = new FormData();
+    localForm.append('file', file);
+    return uploadWithStorageIntent({
+      intentPath: `/intakes/${id}/offerings/${offeringId}/timetable/upload-intent`,
+      finalizePath: `/intakes/${id}/offerings/${offeringId}/timetable`,
+      file,
+      localForm,
+    });
+  },
+  timetableDownloadUrl: (id, offeringId) =>
+    `${api.defaults.baseURL}/intakes/${id}/offerings/${offeringId}/timetable`,
   removeOffering: async (id, offeringId) =>
     api.delete(`/intakes/${id}/offerings/${offeringId}`),
 };
@@ -317,17 +329,6 @@ export const cohortsAPI = {
   get: async (id) => api.get(`/cohorts/${id}`),
   create: async (form) => api.post('/cohorts/', form),
   update: async (id, form) => api.put(`/cohorts/${id}`, form),
-  uploadTimetable: async (id, file) => {
-    const localForm = new FormData();
-    localForm.append('file', file);
-    return uploadWithStorageIntent({
-      intentPath: `/cohorts/${id}/timetable/upload-intent`,
-      finalizePath: `/cohorts/${id}/timetable`,
-      file,
-      localForm,
-    });
-  },
-  timetableDownloadUrl: (id) => `${api.defaults.baseURL}/cohorts/${id}/timetable`,
   delete: async (id) => api.delete(`/cohorts/${id}`),
   enrolStudent: async (id, studentId) => api.post(`/cohorts/${id}/enrol`, { studentId }),
   removeEnrolment: async (id, enrolmentId) => api.delete(`/cohorts/${id}/enrolments/${enrolmentId}`),

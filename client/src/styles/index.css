@@ -361,10 +361,18 @@ body {
 .intake-programme-picker select { min-height: 100px; }
 .intake-programme-picker small { color: var(--color-text-muted); font-size: 10px; }
 .intake-offering-list { display: grid; margin-top: 18px; }
-.intake-offering { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 15px 0; border-top: 1px solid var(--color-border); }
+.intake-offering { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr) auto auto; align-items: start; gap: 16px; padding: 15px 0; border-top: 1px solid var(--color-border); }
 .intake-offering-copy { display: grid; gap: 4px; }
 .intake-offering-copy strong { color: var(--color-primary); font-size: 13px; }
 .intake-offering-copy span, .intake-offering-copy small { color: var(--color-text-muted); font-size: 10px; }
+.intake-offering-timetable { min-width: 0; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 9px; }
+.intake-offering-timetable > summary { color: var(--color-primary); cursor: pointer; font-size: 11px; font-weight: 700; }
+.intake-offering-timetable > .field-hint { display: block; margin: 9px 0; }
+.intake-offering-timetable-current { display: grid; justify-items: start; gap: 8px; margin: 9px 0; }
+.intake-offering-timetable-upload { display: grid; justify-items: start; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.intake-offering-timetable-upload .form-field { width: 100%; margin: 0; }
+.intake-offering-timetable-upload input[type="file"] { width: 100%; }
+.intake-offering-timetable-upload > a { display: inline-flex; align-items: center; gap: 7px; color: var(--color-secondary); font-size: 11px; overflow-wrap: anywhere; }
 .intake-offering .icon-button:disabled { opacity: .4; cursor: not-allowed; }
 .eyebrow { color: #a37a37; font-size: 10px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
 .eyebrow-light { color: #eed296; }
@@ -754,11 +762,6 @@ body {
 .calendar-reschedule-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; width: 100%; padding-top: 12px; border-top: 1px solid var(--color-border); }
 .calendar-reschedule-form .form-field { flex: 1 1 180px; margin: 0; }
 .calendar-reschedule-form > .btn { flex: 0 0 auto; }
-.cohort-timetable-form { display: grid; gap: 14px; }
-.cohort-timetable-upload { display: grid; justify-items: start; gap: 9px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border); }
-.cohort-timetable-upload .form-field { width: min(100%, 520px); margin: 0; }
-.cohort-timetable-upload input[type="file"] { width: 100%; }
-.cohort-timetable-upload > a { display: inline-flex; align-items: center; gap: 7px; color: var(--color-secondary); font-size: 13px; overflow-wrap: anywhere; }
 .timetable-fields { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 10px; }
 .timetable-fields legend { padding: 0 5px; color: var(--color-primary); font-size: 13px; font-weight: 700; }
 .field-hint { color: var(--color-text-muted); font-size: 12px; }
@@ -827,8 +830,8 @@ body {
   .intake-detail-heading { flex-direction: column; }
   .intake-action-row { align-items: stretch; flex-direction: column; }
   .intake-action-row .field { min-width: 0; }
-  .intake-offering { grid-template-columns: 1fr auto; gap: 10px; }
-  .intake-offering .table-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .intake-offering { grid-template-columns: 1fr; gap: 10px; }
+  .intake-offering .table-actions { grid-column: 1; justify-content: flex-start; }
   .learning-progress-panel { grid-template-columns: 1fr; }
   .learning-progress-panel > .btn { justify-self: start; }
   .lesson-navigation { flex-wrap: wrap; }

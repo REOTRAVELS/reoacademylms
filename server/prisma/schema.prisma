@@ -272,6 +272,11 @@ model IntakeProgramOffering {
   academicStartDate  DateTime                    @db.Timestamptz(3)
   academicEndDate    DateTime                    @db.Date
   status             IntakeProgramOfferingStatus @default(ACTIVE)
+  schedule           String?
+  timetableFileName      String?
+  timetableMimeType      String?
+  timetableStoragePath String?
+  timetableSizeBytes    Int?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cohorts            Cohort[]
@@ -365,10 +370,6 @@ model Cohort {
   endDate                 DateTime?
   status                  CohortStatus           @default(PLANNED)
   schedule                String?
-  timetableFileName       String?
-  timetableMimeType       String?
-  timetableStoragePath    String?
-  timetableSizeBytes      Int?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   enrolments              Enrolment[]

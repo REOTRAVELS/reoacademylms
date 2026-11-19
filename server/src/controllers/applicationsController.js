@@ -5,20 +5,28 @@ import { AdmissionsError, createApplication, listOpenOfferings } from '../servic
 import { getStudentIntakeAccess } from '../utils/intakeAccess.js';
 
 const offeringInclude = {
-  programme: { select: { id: true, title: true, qualificationType: true } },
-  intake: {
-    select: {
-      id: true,
-      gateNumber: true,
-      season: true,
-      year: true,
-      timezone: true,
+  select: {
+    id: true,
+    intakeId: true,
+    programmeId: true,
+    academicStartDate: true,
+    academicEndDate: true,
+    status: true,
+    programme: { select: { id: true, title: true, qualificationType: true } },
+    intake: {
+      select: {
+        id: true,
+        gateNumber: true,
+        season: true,
+        year: true,
+        timezone: true,
+      },
     },
   },
 };
 
 const applicationInclude = {
-  programOffering: { include: offeringInclude },
+  programOffering: offeringInclude,
   history: {
     include: { changedBy: { select: { firstName: true, lastName: true } } },
     orderBy: { createdAt: 'asc' },
@@ -45,7 +53,7 @@ export const getMyApplication = async (req, res) => {
     }),
     prisma.programEnrollment.findFirst({
       where: { studentId: req.user.id, status: 'ACTIVE' },
-      include: { programOffering: { include: offeringInclude } },
+      include: { programOffering: offeringInclude },
     }),
     getStudentIntakeAccess(req.user.id),
   ]);
@@ -90,7 +98,7 @@ export const listApplications = async (req, res) => {
       student: {
         select: { id: true, firstName: true, lastName: true, email: true, phone: true, status: true },
       },
-      programOffering: { include: offeringInclude },
+      programOffering: offeringInclude,
       reviewedBy: { select: { firstName: true, lastName: true } },
     },
     orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],

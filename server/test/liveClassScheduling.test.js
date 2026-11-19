@@ -117,7 +117,7 @@ test('calendar export escapes event text and uses UTC times', () => {
   assert.ok(calendar.endsWith('\r\n'));
 });
 
-test('recurring cohort schedules generate ordinary class dates within the cohort window', () => {
+test('recurring schedules generate class dates within the supplied academic window', () => {
   const dates = generateRecurringClassDates({
     schedule: 'Mon, Wed 09:00-10:30',
     startDate: new Date('2026-01-05T00:00:00.000Z'),
@@ -132,7 +132,7 @@ test('recurring cohort schedules generate ordinary class dates within the cohort
   ]);
 });
 
-test('recurring cohort schedules use the intake timezone and include the final cohort date', () => {
+test('recurring schedules use the intake timezone and include the final academic date', () => {
   const dates = generateRecurringClassDates({
     schedule: 'Sun 09:00-10:30',
     startDate: new Date('2026-03-08T00:00:00.000Z'),
