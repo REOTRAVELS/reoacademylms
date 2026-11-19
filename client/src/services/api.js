@@ -75,7 +75,7 @@ const uploadWithStorageIntent = async ({
 // Keep individual LMS API upload requests below Vercel's request-body limit.
 const objectStorageProxyLimitBytes = 4 * 1024 * 1024;
 
-const uploadResourceInChunks = async ({ file, localForm, metadata }) => {
+const uploadResourceInChunks = async ({ file, localForm, metadata, onProgress }) => {
   const { data } = await api.post('/resources/chunked-upload', {
     originalName: file.name,
     mimeType: file.type,
@@ -83,23 +83,54 @@ const uploadResourceInChunks = async ({ file, localForm, metadata }) => {
     ...metadata,
   });
   const intent = data.data;
-  if (intent.mode === 'local') return api.post('/resources/', localForm);
+  if (intent.mode === 'local') {
+    return api.post('/resources/', localForm, {
+      onUploadProgress: (event) => onProgress?.({
+        loaded: Math.min(event.loaded, file.size),
+        total: file.size,
+        phase: 'uploading',
+      }),
+    });
+  }
 
-  const uploadToken = intent.uploadToken;
+  let uploadToken = intent.uploadToken;
   if (typeof uploadToken !== 'string') throw new Error('Could not start the course resource upload');
-  const headers = {
-    'Content-Type': 'application/octet-stream',
-    'X-Resource-Upload-Token': uploadToken,
-  };
   try {
     if (!Number.isSafeInteger(intent.chunkSizeBytes) || intent.chunkSizeBytes < 1) {
       throw new Error('The course resource upload could not be initialized');
     }
     for (let start = 0, index = 0; start < file.size; start += intent.chunkSizeBytes, index += 1) {
       const chunk = file.slice(start, Math.min(start + intent.chunkSizeBytes, file.size));
+      let chunkProgress = 0;
       for (let attempt = 0; ; attempt += 1) {
         try {
-          await api.put(`/resources/chunked-upload/chunks/${index}`, chunk, { headers });
+          const { data: chunkResponse } = await api.put(
+            `/resources/chunked-upload/chunks/${index}`,
+            chunk,
+            {
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'X-Resource-Upload-Token': uploadToken,
+              },
+              onUploadProgress: (event) => {
+                chunkProgress = Math.max(chunkProgress, Math.min(event.loaded, chunk.size));
+                onProgress?.({
+                  loaded: Math.min(start + chunkProgress, file.size),
+                  total: file.size,
+                  phase: 'uploading',
+                });
+              },
+            },
+          );
+          if (typeof chunkResponse.data?.uploadToken === 'string') {
+            uploadToken = chunkResponse.data.uploadToken;
+          }
+          chunkProgress = chunk.size;
+          onProgress?.({
+            loaded: Math.min(start + chunk.size, file.size),
+            total: file.size,
+            phase: 'uploading',
+          });
           break;
         } catch (error) {
           if (attempt >= 2 || (error.response && error.response.status < 500)) throw error;
@@ -107,7 +138,10 @@ const uploadResourceInChunks = async ({ file, localForm, metadata }) => {
         }
       }
     }
-    return api.post('/resources/chunked-upload/finalize', {}, { headers });
+    onProgress?.({ loaded: file.size, total: file.size, phase: 'finalizing' });
+    return api.post('/resources/chunked-upload/finalize', {}, {
+      headers: { 'X-Resource-Upload-Token': uploadToken },
+    });
   } catch (error) {
     try {
       await api.delete('/resources/chunked-upload', {
@@ -322,15 +356,24 @@ export const liveClassesAPI = {
 
 export const resourcesAPI = {
   list: async (params = {}) => api.get('/resources/', { params }),
-  upload: async (formData) => {
+  upload: async (formData, { onProgress } = {}) => {
     const file = formData.get('file');
     if (!file || typeof file.name !== 'string' || typeof file.size !== 'number') {
       throw new Error('Choose a file to upload');
     }
-    if (file.size <= objectStorageProxyLimitBytes) return api.post('/resources/', formData);
+    if (file.size <= objectStorageProxyLimitBytes) {
+      return api.post('/resources/', formData, {
+        onUploadProgress: (event) => onProgress?.({
+          loaded: Math.min(event.loaded, file.size),
+          total: file.size,
+          phase: 'uploading',
+        }),
+      });
+    }
     return uploadResourceInChunks({
       file,
       localForm: formData,
+      onProgress,
       metadata: {
         courseId: formData.get('courseId'),
         lessonId: formData.get('lessonId') || undefined,

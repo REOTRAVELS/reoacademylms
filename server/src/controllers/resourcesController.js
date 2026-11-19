@@ -16,6 +16,10 @@ const resourceUploadManifestKey = (sessionId) => `course-resource-upload-session
 const resourceUploadChunkKey = (sessionId, chunkIndex) => (
   `course-resource-upload-chunks/${sessionId}/${chunkIndex}`
 );
+const resourceUploadTokenForNextChunk = (claims, nextChunkIndex) => {
+  const { iat, exp, nbf, ...payload } = claims;
+  return signToken({ ...payload, nextChunkIndex }, resourceUploadTokenTtl);
+};
 
 const readFileHeader = (filePath) => {
   const descriptor = fs.openSync(filePath, 'r');
@@ -201,6 +205,7 @@ const getChunkedUploadClaims = (req, res) => {
     || typeof claims.uploadId !== 'string'
     || !Number.isSafeInteger(claims.sizeBytes)
     || !Number.isSafeInteger(claims.totalChunks)
+    || !Number.isSafeInteger(claims.nextChunkIndex)
   ) {
     fail(res, 'Upload session is invalid', 403);
     return null;
@@ -222,7 +227,6 @@ const readResourceUploadManifest = async (storage, sessionId) => {
     if (
       !Number.isSafeInteger(manifest.nextChunkIndex)
       || !Array.isArray(manifest.parts)
-      || !Array.isArray(manifest.chunkHashes)
       || typeof manifest.uploadId !== 'string'
     ) throw new Error('Invalid resource upload manifest');
     return manifest;
@@ -291,7 +295,7 @@ export const createChunkedResourceUpload = async (req, res) => {
     totalChunks,
     nextChunkIndex: 0,
     parts: [],
-    chunkHashes: [],
+    lastChunkHash: null,
   };
   try {
     await writeResourceUploadManifest(storage, sessionId, manifest);
@@ -321,6 +325,7 @@ export const createChunkedResourceUpload = async (req, res) => {
     mimeType: details.mimeType,
     sizeBytes: details.sizeBytes,
     totalChunks,
+    nextChunkIndex: 0,
   }, resourceUploadTokenTtl);
   return ok(res, {
     mode: 's3',
@@ -355,30 +360,32 @@ export const uploadResourceChunk = async (req, res) => {
   ) return fail(res, 'Upload session was not found or has expired', 410);
   const chunkHash = createHash('sha256').update(req.body).digest('hex');
   if (chunkIndex < manifest.nextChunkIndex) {
-    if (manifest.chunkHashes[chunkIndex] === chunkHash) {
-      return ok(res, { nextChunkIndex: chunkIndex + 1 });
+    if (
+      chunkIndex === manifest.nextChunkIndex - 1
+      && manifest.lastChunkHash === chunkHash
+    ) {
+      return ok(res, {
+        nextChunkIndex: chunkIndex + 1,
+        uploadToken: resourceUploadTokenForNextChunk(claims, chunkIndex + 1),
+      });
     }
     return fail(res, 'This upload chunk was already received with different content', 409);
   }
-  if (chunkIndex !== manifest.nextChunkIndex) {
+  if (
+    chunkIndex !== claims.nextChunkIndex
+    || manifest.nextChunkIndex !== chunkIndex - (chunkIndex % 2)
+  ) {
     return fail(res, 'Upload chunks must be sent in order. Please restart the upload.', 409);
   }
-
-  await storage.putObject({
-    key: resourceUploadChunkKey(claims.sessionId, chunkIndex),
-    body: req.body,
-    contentType: 'application/octet-stream',
-    contentLength: req.body.length,
-  });
 
   let parts = manifest.parts;
   let pairedChunkIndexes = [];
   if (chunkIndex % 2 === 1) {
     const firstChunkIndex = chunkIndex - 1;
-    const partBody = Buffer.concat(await Promise.all([
-      storage.getObjectBuffer(resourceUploadChunkKey(claims.sessionId, firstChunkIndex)),
-      storage.getObjectBuffer(resourceUploadChunkKey(claims.sessionId, chunkIndex)),
-    ]));
+    const firstChunk = await storage.getObjectBuffer(
+      resourceUploadChunkKey(claims.sessionId, firstChunkIndex),
+    );
+    const partBody = Buffer.concat([firstChunk, req.body]);
     const partNumber = parts.length + 1;
     const uploadedPart = await storage.uploadPart({
       key: claims.storageKey,
@@ -389,17 +396,27 @@ export const uploadResourceChunk = async (req, res) => {
     });
     if (!uploadedPart.ETag) throw new Error('Object storage did not return a multipart part tag');
     parts = [...parts, { PartNumber: partNumber, ETag: uploadedPart.ETag }];
-    pairedChunkIndexes = [firstChunkIndex, chunkIndex];
+    pairedChunkIndexes = [firstChunkIndex];
+    await writeResourceUploadManifest(storage, claims.sessionId, {
+      ...manifest,
+      nextChunkIndex: chunkIndex + 1,
+      parts,
+      lastChunkHash: chunkHash,
+    });
+  } else {
+    await storage.putObject({
+      key: resourceUploadChunkKey(claims.sessionId, chunkIndex),
+      body: req.body,
+      contentType: 'application/octet-stream',
+      contentLength: req.body.length,
+    });
   }
 
-  await writeResourceUploadManifest(storage, claims.sessionId, {
-    ...manifest,
-    nextChunkIndex: chunkIndex + 1,
-    parts,
-    chunkHashes: [...manifest.chunkHashes, chunkHash],
-  });
   await deleteTemporaryChunks(storage, claims.sessionId, pairedChunkIndexes);
-  return ok(res, { nextChunkIndex: chunkIndex + 1 });
+  return ok(res, {
+    nextChunkIndex: chunkIndex + 1,
+    uploadToken: resourceUploadTokenForNextChunk(claims, chunkIndex + 1),
+  });
 };
 
 export const finalizeChunkedResourceUpload = async (req, res) => {
@@ -423,7 +440,11 @@ export const finalizeChunkedResourceUpload = async (req, res) => {
     || manifest.uploadId !== claims.uploadId
     || manifest.totalChunks !== claims.totalChunks
   ) return fail(res, 'Upload session was not found or has expired', 410);
-  if (manifest.nextChunkIndex !== claims.totalChunks) {
+  const completedPairChunkCount = claims.totalChunks - (claims.totalChunks % 2);
+  if (
+    claims.nextChunkIndex !== claims.totalChunks
+    || manifest.nextChunkIndex !== completedPairChunkCount
+  ) {
     return fail(res, 'Upload is incomplete. Please finish sending all chunks.', 409);
   }
 

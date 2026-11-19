@@ -897,6 +897,12 @@ body {
 .builder-resource-upload p { margin: 0; }
 .builder-resource-upload form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .builder-resource-file { display: grid; gap: 6px; color: var(--color-primary); font-size: 11px; font-weight: 700; }
+.resource-upload-progress { display: grid; flex-basis: 100%; gap: 7px; width: 100%; color: var(--color-primary); font-size: 12px; font-weight: 700; }
+.resource-upload-progress progress { width: 100%; height: 8px; overflow: hidden; border: 0; border-radius: 999px; accent-color: var(--color-secondary); background: #e9eee9; }
+.resource-upload-progress progress::-webkit-progress-bar { border-radius: 999px; background: #e9eee9; }
+.resource-upload-progress progress::-webkit-progress-value { border-radius: 999px; background: var(--color-secondary); transition: width .15s ease; }
+.resource-upload-progress progress::-moz-progress-bar { border-radius: 999px; background: var(--color-secondary); }
+.resource-upload-form .resource-upload-progress { justify-self: stretch; }
 .builder-resource-list ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
 .builder-resource-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 12px; padding: 12px; border: 1px solid #e0e6e4; }
 .builder-resource-list li > span { min-width: 0; overflow-wrap: anywhere; color: var(--color-primary); font-size: 12px; font-weight: 700; }

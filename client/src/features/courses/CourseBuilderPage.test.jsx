@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const { coursesAPI, resourcesAPI } = vi.hoisted(() => ({
@@ -165,6 +165,36 @@ describe('CourseBuilderPage', () => {
     fireEvent.click(within(uploadedResource).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(resourcesAPI.delete).toHaveBeenCalledWith('resource-2'));
     expect(screen.queryByText('new-guide.pdf')).toBeNull();
+  });
+
+  it('prevents upload form reloads and displays upload progress', async () => {
+    let finishUpload;
+    resourcesAPI.upload.mockImplementation(async (_formData, { onProgress }) => {
+      onProgress({ loaded: 5, total: 10, phase: 'uploading' });
+      await new Promise((resolve) => {
+        finishUpload = resolve;
+      });
+      return { data: { data: { ...resource, id: 'resource-2', originalName: 'lesson.mp4' } } };
+    });
+    const { container } = renderBuilder();
+    await screen.findByRole('heading', { name: 'Travel Operations' });
+    fireEvent.click(screen.getByRole('button', { name: /Course resources/ }));
+    await screen.findByRole('heading', { name: 'Course resources', level: 3 });
+
+    const file = new File(['video-content'], 'lesson.mp4', { type: 'video/mp4' });
+    const fileInput = container.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+    fileInput.closest('form').dispatchEvent(submitEvent);
+
+    expect(submitEvent.defaultPrevented).toBe(true);
+    expect(await screen.findByText('Uploading resource: 50%')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: 'Upload progress' }).value).toBe(50);
+
+    await act(async () => {
+      finishUpload();
+    });
+    await waitFor(() => expect(resourcesAPI.upload).toHaveBeenCalledOnce());
   });
 
   it('shows direct storage upload errors to course editors', async () => {

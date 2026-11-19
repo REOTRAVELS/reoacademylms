@@ -66,6 +66,18 @@ const isHttpUrl = (value) => {
   }
 };
 const hasDraftChanges = (draft, pristine) => Object.keys(pristine).some((key) => draft[key] !== pristine[key]);
+const uploadPercent = ({ loaded, total }) => (total ? Math.floor((loaded / total) * 100) : 0);
+
+const ResourceUploadProgress = ({ progress }) => {
+  if (!progress) return null;
+  const percent = uploadPercent(progress);
+  return (
+    <div className="resource-upload-progress" role="status" aria-live="polite">
+      <span>{progress.phase === 'finalizing' ? 'Finishing upload…' : `Uploading resource: ${percent}%`}</span>
+      <progress aria-label="Upload progress" value={percent} max="100" />
+    </div>
+  );
+};
 
 const completionSettings = (value) => {
   try {
@@ -141,6 +153,7 @@ export default function CourseBuilderPage() {
   const [contentDirty, setContentDirty] = useState(false);
   const [resourceNameDrafts, setResourceNameDrafts] = useState({});
   const [resourceFileSelected, setResourceFileSelected] = useState(false);
+  const [resourceUploadProgress, setResourceUploadProgress] = useState(null);
   const [assessmentDraft, setAssessmentDraft] = useState(newAssessment);
   const [questionDraft, setQuestionDraft] = useState(newQuestion);
   const [editingAssessmentId, setEditingAssessmentId] = useState('');
@@ -392,14 +405,17 @@ export default function CourseBuilderPage() {
   };
 
   const uploadCourseResource = async (event) => {
+    event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const file = formData.get('file');
     formData.set('courseId', id);
     setSaving(true);
+    setResourceUploadProgress({ loaded: 0, total: file.size, phase: 'uploading' });
     setError('');
     setNotice('');
     try {
-      const { data } = await resourcesAPI.upload(formData);
+      const { data } = await resourcesAPI.upload(formData, { onProgress: setResourceUploadProgress });
       setCourse((current) => ({
         ...current,
         resources: [...(current.resources || []), data.data],
@@ -413,6 +429,7 @@ export default function CourseBuilderPage() {
       setError(requestError.response?.data?.message || requestError.message || 'Could not upload this learning resource.');
     } finally {
       setSaving(false);
+      setResourceUploadProgress(null);
     }
   };
 
@@ -1055,8 +1072,9 @@ export default function CourseBuilderPage() {
                 <label className="builder-resource-file">Select a resource file
                   <input type="file" name="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.mp4,.webm" required onChange={(event) => setResourceFileSelected(Boolean(event.target.files?.length))} />
                 </label>
-                <Button type="submit" disabled={saving}><Plus size={16} /> Upload resource</Button>
+                <Button type="submit" disabled={saving}><Plus size={16} /> {saving ? 'Uploading…' : 'Upload resource'}</Button>
               </form>
+              <ResourceUploadProgress progress={resourceUploadProgress} />
             </div>
             <div className="builder-wide builder-resource-list">
               <h4>Uploaded course resources</h4>

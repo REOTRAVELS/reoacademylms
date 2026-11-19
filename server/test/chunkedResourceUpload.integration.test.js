@@ -220,7 +220,7 @@ test('large course resources upload through ordered LMS API chunks and S3 multip
     const initPayload = await initResponse.json();
     assert.equal(initPayload.data.mode, 's3');
     assert.equal(initPayload.data.chunkSizeBytes, 4 * 1024 * 1024);
-    const uploadToken = initPayload.data.uploadToken;
+    let uploadToken = initPayload.data.uploadToken;
 
     const chunkSize = initPayload.data.chunkSizeBytes;
     const incompleteFinalize = await fetch(`${baseUrl}/chunked-upload/finalize`, {
@@ -246,40 +246,56 @@ test('large course resources upload through ordered LMS API chunks and S3 multip
     assert.equal(outOfOrderResponse.status, 409);
 
     for (let start = 0, index = 0; start < file.length; start += chunkSize, index += 1) {
+      const requestToken = uploadToken;
       const chunkResponse = await fetch(`${baseUrl}/chunked-upload/chunks/${index}`, {
         method: 'PUT',
         headers: {
           Cookie: cookie,
           'Content-Type': 'application/octet-stream',
-          'X-Resource-Upload-Token': uploadToken,
+          'X-Resource-Upload-Token': requestToken,
         },
         body: file.subarray(start, Math.min(start + chunkSize, file.length)),
       });
       assert.equal(chunkResponse.status, 200);
+      let chunkPayload = await chunkResponse.json();
       if (index === 0) {
         const retryResponse = await fetch(`${baseUrl}/chunked-upload/chunks/${index}`, {
           method: 'PUT',
           headers: {
             Cookie: cookie,
             'Content-Type': 'application/octet-stream',
-            'X-Resource-Upload-Token': uploadToken,
+            'X-Resource-Upload-Token': requestToken,
           },
           body: file.subarray(start, Math.min(start + chunkSize, file.length)),
         });
         assert.equal(retryResponse.status, 200);
-        const conflictingRetryChunk = Buffer.from(file.subarray(start, start + chunkSize));
-        conflictingRetryChunk[0] = 1;
+        chunkPayload = await retryResponse.json();
+      } else if (index === 1) {
         const conflictingRetry = await fetch(`${baseUrl}/chunked-upload/chunks/${index}`, {
           method: 'PUT',
           headers: {
             Cookie: cookie,
             'Content-Type': 'application/octet-stream',
-            'X-Resource-Upload-Token': uploadToken,
+            'X-Resource-Upload-Token': requestToken,
+          },
+          body: file.subarray(start, Math.min(start + chunkSize, file.length)),
+        });
+        assert.equal(conflictingRetry.status, 200);
+        chunkPayload = await conflictingRetry.json();
+        const conflictingRetryChunk = Buffer.from(file.subarray(start, start + chunkSize));
+        conflictingRetryChunk[0] = 1;
+        const rejectedRetry = await fetch(`${baseUrl}/chunked-upload/chunks/${index}`, {
+          method: 'PUT',
+          headers: {
+            Cookie: cookie,
+            'Content-Type': 'application/octet-stream',
+            'X-Resource-Upload-Token': requestToken,
           },
           body: conflictingRetryChunk,
         });
-        assert.equal(conflictingRetry.status, 409);
+        assert.equal(rejectedRetry.status, 409);
       }
+      uploadToken = chunkPayload.data.uploadToken;
     }
 
     const finalizeResponse = await fetch(`${baseUrl}/chunked-upload/finalize`, {

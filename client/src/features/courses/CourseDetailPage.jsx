@@ -14,6 +14,18 @@ import CourseDiscussions from './CourseDiscussions.jsx';
 
 const initialAssignment = { title: '', description: '', instructions: '', maxScore: 100, dueDate: '' };
 const resourceAccept = '.mp4,.webm,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp';
+const uploadPercent = ({ loaded, total }) => (total ? Math.floor((loaded / total) * 100) : 0);
+
+const ResourceUploadProgress = ({ progress }) => {
+  if (!progress) return null;
+  const percent = uploadPercent(progress);
+  return (
+    <div className="resource-upload-progress" role="status" aria-live="polite">
+      <span>{progress.phase === 'finalizing' ? 'Finishing upload…' : `Uploading resource: ${percent}%`}</span>
+      <progress aria-label="Upload progress" value={percent} max="100" />
+    </div>
+  );
+};
 
 const readLastLesson = (key) => {
   try {
@@ -55,6 +67,8 @@ export default function CourseDetailPage() {
   const [lessonLoadError, setLessonLoadError] = useState('');
   const [lessonRetryKey, setLessonRetryKey] = useState(0);
   const [resourceSaving, setResourceSaving] = useState(false);
+  const [resourceUploadProgress, setResourceUploadProgress] = useState(null);
+  const [resourceUploadTarget, setResourceUploadTarget] = useState('');
   const [assignmentDraft, setAssignmentDraft] = useState(initialAssignment);
   const [submissionDrafts, setSubmissionDrafts] = useState({});
   const [selectedAssignment, setSelectedAssignment] = useState(null);
@@ -133,10 +147,12 @@ export default function CourseDetailPage() {
     formData.set('courseId', id);
     if (lessonId) formData.set('lessonId', lessonId);
     setResourceSaving(true);
+    setResourceUploadTarget(lessonId || 'course');
+    setResourceUploadProgress({ loaded: 0, total: formData.get('file').size, phase: 'uploading' });
     setError('');
     setNotice('');
     try {
-      await resourcesAPI.upload(formData);
+      await resourcesAPI.upload(formData, { onProgress: setResourceUploadProgress });
       uploadForm.reset();
       await loadCourse();
       await refreshSelectedLesson(lessonId);
@@ -145,6 +161,8 @@ export default function CourseDetailPage() {
       setError(requestError.response?.data?.message || requestError.message || 'Could not upload this learning material.');
     } finally {
       setResourceSaving(false);
+      setResourceUploadProgress(null);
+      setResourceUploadTarget('');
     }
   };
 
@@ -530,6 +548,7 @@ export default function CourseDetailPage() {
           <p className="muted small">MP4/WebM video, PDF, Office documents, spreadsheet, text, or image.</p>
           <input className="input" type="file" name="file" accept={resourceAccept} required />
           <Button type="submit" variant="secondary" disabled={resourceSaving}><Upload size={15} /> {resourceSaving ? 'Uploading…' : 'Upload to lesson'}</Button>
+          {resourceUploadTarget === selectedLesson.id && <ResourceUploadProgress progress={resourceUploadProgress} />}
         </form>}
         {role === 'STUDENT' && (
           <div className="lesson-completion">
@@ -554,6 +573,7 @@ export default function CourseDetailPage() {
           <p className="muted small">Materials attached here are available to learners enrolled in this published course.</p>
           <input className="input" type="file" name="file" accept={resourceAccept} required />
           <Button type="submit" variant="secondary" disabled={resourceSaving}><Upload size={15} /> {resourceSaving ? 'Uploading…' : 'Upload course material'}</Button>
+          {resourceUploadTarget === 'course' && <ResourceUploadProgress progress={resourceUploadProgress} />}
         </form>}
       </section>}
 
