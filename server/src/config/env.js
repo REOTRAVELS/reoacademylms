@@ -7,7 +7,6 @@ const port = process.env.PORT === undefined ? 5000 : Number(process.env.PORT);
 const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_FROM;
 const hasBrevoEmailConfig = Boolean(process.env.BREVO_API_KEY && emailFrom);
 const hasSmtpEmailConfig = Boolean(process.env.SMTP_URL && process.env.SMTP_FROM);
-const cronSecret = process.env.CRON_SECRET;
 const fileStorageProvider = process.env.FILE_STORAGE_PROVIDER || (
   nodeEnv === 'production' ? 's3' : 'local'
 );
@@ -77,10 +76,6 @@ if (nodeEnv === 'production') {
   if (process.env.VERCEL === '1' && !process.env.REDIS_URL) {
     throw new Error('REDIS_URL is required on Vercel for shared classroom realtime state');
   }
-  if (process.env.VERCEL === '1' && !cronSecret) {
-    throw new Error('CRON_SECRET is required on Vercel for scheduled class reminders');
-  }
-
   let liveKitUrl;
   let smtpUrl;
   try {
@@ -142,7 +137,6 @@ export const env = {
   smtpFrom: process.env.SMTP_FROM,
   emailFrom,
   brevoApiKey: process.env.BREVO_API_KEY,
-  cronSecret,
   fileStorageProvider,
   redisUrl: process.env.REDIS_URL,
   livekitUrl: process.env.LIVEKIT_URL,

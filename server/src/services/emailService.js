@@ -34,15 +34,15 @@ export const createBrevoTransport = ({ apiKey, fetchImpl = fetch }) => ({
   },
 });
 
-const emailConfiguration = env.brevoApiKey && env.emailFrom
+const emailConfiguration = env.smtpUrl && env.smtpFrom
   ? {
-    mailTransport: createBrevoTransport({ apiKey: env.brevoApiKey }),
-    from: env.emailFrom,
+    mailTransport: nodemailer.createTransport(env.smtpUrl),
+    from: env.smtpFrom,
   }
-  : env.smtpUrl && env.smtpFrom
+  : env.brevoApiKey && env.emailFrom
     ? {
-      mailTransport: nodemailer.createTransport(env.smtpUrl),
-      from: env.smtpFrom,
+      mailTransport: createBrevoTransport({ apiKey: env.brevoApiKey }),
+      from: env.emailFrom,
     }
     : null;
 
