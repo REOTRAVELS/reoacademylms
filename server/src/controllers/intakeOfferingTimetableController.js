@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import prisma from '../config/database.js';
+import { env } from '../config/env.js';
 import { ok, fail } from '../utils/response.js';
 import { audit } from '../utils/audit.js';
 import { getObjectStorage, isObjectStorageEnabled } from '../services/objectStorage.js';
@@ -18,8 +19,6 @@ const timetableFileTypes = new Map([
   ['.csv', ['text/csv', 'application/vnd.ms-excel']],
 ]);
 
-const maxTimetableFileSizeBytes = 1024 * 1024 * 1024;
-
 const timetableUploadDetails = (body = {}) => {
   const originalName = path.posix.basename(String(body.originalName || '').replace(/\\/g, '/')).trim();
   const mimeType = body.mimeType;
@@ -31,8 +30,11 @@ const timetableUploadDetails = (body = {}) => {
     || typeof mimeType !== 'string'
     || !hasAllowedUploadType(timetableFileTypes, originalName, mimeType)
   ) return { error: 'Choose a PDF, Word, PowerPoint, or Excel timetable file', status: 400 };
-  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > maxTimetableFileSizeBytes) {
-    return { error: 'Timetable files must be no larger than 1 GB', status: 413 };
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > env.maxFileSizeMb * 1024 * 1024) {
+    const maxSizeLabel = env.maxFileSizeMb % 1024 === 0
+      ? `${env.maxFileSizeMb / 1024} GB`
+      : `${env.maxFileSizeMb} MB`;
+    return { error: `Timetable files must be no larger than ${maxSizeLabel}`, status: 413 };
   }
   return { originalName, mimeType, sizeBytes };
 };
@@ -51,7 +53,8 @@ const readTimetableFileHeader = (filePath) => {
 export const cleanupOfferingTimetableFile = async (storagePath) => {
   if (!storagePath) return;
   if (storagePath.startsWith('program-offering-timetables/')) {
-    if (isObjectStorageEnabled()) await getObjectStorage().deleteObject(storagePath);
+    if (!isObjectStorageEnabled()) throw new Error('Object storage is not enabled for timetable cleanup');
+    await getObjectStorage().deleteObject(storagePath);
   } else if (fs.existsSync(storagePath)) {
     fs.unlinkSync(storagePath);
   }
@@ -347,4 +350,46 @@ export const downloadOfferingTimetable = async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Type', offering.timetableMimeType);
   return res.download(filePath, path.basename(offering.timetableFileName));
+};
+
+export const deleteOfferingTimetable = async (req, res) => {
+  const offering = await prisma.intakeProgramOffering.findFirst({
+    where: { id: req.params.offeringId, intakeId: req.params.id },
+    select: {
+      id: true,
+      timetableFileName: true,
+      timetableMimeType: true,
+      timetableSizeBytes: true,
+      timetableStoragePath: true,
+    },
+  });
+  if (!offering) return fail(res, 'Program offering not found', 404);
+  if (!offering.timetableStoragePath) return fail(res, 'Timetable not found', 404);
+
+  await prisma.intakeProgramOffering.update({
+    where: { id: offering.id },
+    data: {
+      timetableFileName: null,
+      timetableMimeType: null,
+      timetableSizeBytes: null,
+      timetableStoragePath: null,
+    },
+  });
+
+  try {
+    await cleanupOfferingTimetableFile(offering.timetableStoragePath);
+  } catch (error) {
+    console.error('Could not remove deleted program offering timetable file', error);
+    return fail(res, 'Timetable record was removed, but its stored file could not be deleted', 500);
+  }
+
+  await audit({
+    actorId: req.user.id,
+    action: 'DELETE_PROGRAM_OFFERING_TIMETABLE',
+    entity: 'IntakeProgramOffering',
+    entityId: offering.id,
+    metadata: { intakeId: req.params.id, fileName: offering.timetableFileName },
+    ipAddress: req.ip,
+  });
+  return ok(res, { id: offering.id }, 'Timetable document deleted');
 };

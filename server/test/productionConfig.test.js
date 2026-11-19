@@ -9,7 +9,7 @@ const configPath = new URL('../src/config/env.js', import.meta.url).href;
 
 const loadConfig = (overrides = {}) => spawnSync(
   process.execPath,
-  ['--input-type=module', '-e', `await import(${JSON.stringify(configPath)})`],
+  ['--input-type=module', '-e', `const {env}=await import(${JSON.stringify(configPath)});console.log(env.maxFileSizeMb)`],
   {
     cwd: serverDirectory,
     encoding: 'utf8',
@@ -59,11 +59,11 @@ test('production configuration rejects invalid port and upload size values', () 
 
   const invalidUploadSize = loadConfig({ MAX_FILE_SIZE_MB: 'not-a-size' });
   assert.notEqual(invalidUploadSize.status, 0);
-  assert.match(invalidUploadSize.stderr, /MAX_FILE_SIZE_MB must be a positive number no greater than 2048/);
+  assert.match(invalidUploadSize.stderr, /MAX_FILE_SIZE_MB must be a positive number/);
 
-  const oversizedUploadLimit = loadConfig({ MAX_FILE_SIZE_MB: '2049' });
-  assert.notEqual(oversizedUploadLimit.status, 0);
-  assert.match(oversizedUploadLimit.stderr, /MAX_FILE_SIZE_MB must be a positive number no greater than 2048/);
+  const zeroUploadLimit = loadConfig({ MAX_FILE_SIZE_MB: '0' });
+  assert.notEqual(zeroUploadLimit.status, 0);
+  assert.match(zeroUploadLimit.stderr, /MAX_FILE_SIZE_MB must be a positive number/);
 });
 
 test('production configuration accepts valid deployment values', () => {
@@ -71,9 +71,10 @@ test('production configuration accepts valid deployment values', () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('production configuration accepts the 2 GB upload limit', () => {
+test('production configuration enforces a 1 GB cap when the environment still says 2 GB', () => {
   const result = loadConfig({ MAX_FILE_SIZE_MB: '2048' });
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '1024');
 });
 
 test('production configuration requires LiveKit, private recording storage, and email delivery', () => {

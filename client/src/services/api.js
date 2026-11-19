@@ -326,6 +326,8 @@ export const intakesAPI = {
   },
   timetableDownloadUrl: (id, offeringId) =>
     `${api.defaults.baseURL}/intakes/${id}/offerings/${offeringId}/timetable`,
+  deleteTimetable: async (id, offeringId) =>
+    api.delete(`/intakes/${id}/offerings/${offeringId}/timetable`),
   removeOffering: async (id, offeringId) =>
     api.delete(`/intakes/${id}/offerings/${offeringId}`),
 };

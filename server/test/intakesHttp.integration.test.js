@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 process.env.JWT_SECRET ||= 'intakes-http-integration-secret';
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
@@ -233,6 +236,53 @@ test('timetable uploads allow up to 1 GB and reject larger files', async () => {
     env.fileStorageProvider = previousProvider;
     if (server?.listening) await closeServer(server);
     restores.reverse().forEach((restore) => restore());
+  }
+});
+
+test('deleting an offering timetable removes its file and metadata', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'reo-timetable-delete-'));
+  const storagePath = path.join(directory, 'schedule.pdf');
+  fs.writeFileSync(storagePath, '%PDF-1.7');
+  const updates = [];
+  const audits = [];
+  const restores = [
+    authRestore(),
+    stubMethod(prisma.intakeProgramOffering, 'findFirst', async () => ({
+      id: 'offering-1',
+      timetableFileName: 'schedule.pdf',
+      timetableMimeType: 'application/pdf',
+      timetableSizeBytes: 8,
+      timetableStoragePath: storagePath,
+    })),
+    stubMethod(prisma.intakeProgramOffering, 'update', async (args) => {
+      updates.push(args);
+      return { id: 'offering-1' };
+    }),
+    stubMethod(prisma.auditLog, 'create', async ({ data }) => {
+      audits.push(data);
+      return { id: 'audit-1' };
+    }),
+  ];
+  let server;
+  try {
+    server = await startServer();
+    const response = await send(server, '/intakes/intake-1/offerings/offering-1/timetable', {
+      method: 'DELETE',
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(updates[0].data, {
+      timetableFileName: null,
+      timetableMimeType: null,
+      timetableSizeBytes: null,
+      timetableStoragePath: null,
+    });
+    assert.equal(fs.existsSync(storagePath), false);
+    assert.equal(audits[0].action, 'DELETE_PROGRAM_OFFERING_TIMETABLE');
+  } finally {
+    if (server?.listening) await closeServer(server);
+    restores.reverse().forEach((restore) => restore());
+    if (fs.existsSync(storagePath)) fs.unlinkSync(storagePath);
+    if (fs.existsSync(directory)) fs.rmdirSync(directory);
   }
 });
 

@@ -10,10 +10,11 @@ const hasSmtpEmailConfig = Boolean(process.env.SMTP_URL && process.env.SMTP_FROM
 const fileStorageProvider = process.env.FILE_STORAGE_PROVIDER || (
   nodeEnv === 'production' ? 's3' : 'local'
 );
-const maxUploadFileSizeMb = 2048;
-const maxFileSizeMb = process.env.MAX_FILE_SIZE_MB === undefined
+const maxUploadFileSizeMb = 1024;
+const configuredMaxFileSizeMb = process.env.MAX_FILE_SIZE_MB === undefined
   ? maxUploadFileSizeMb
   : Number(process.env.MAX_FILE_SIZE_MB);
+const maxFileSizeMb = Math.min(configuredMaxFileSizeMb, maxUploadFileSizeMb);
 const attendanceThresholdPercent = process.env.ATTENDANCE_THRESHOLD_PERCENT === undefined
   ? 75
   : Number(process.env.ATTENDANCE_THRESHOLD_PERCENT);
@@ -21,8 +22,11 @@ const attendanceThresholdPercent = process.env.ATTENDANCE_THRESHOLD_PERCENT === 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535');
 }
-if (!Number.isFinite(maxFileSizeMb) || maxFileSizeMb <= 0 || maxFileSizeMb > maxUploadFileSizeMb) {
-  throw new Error('MAX_FILE_SIZE_MB must be a positive number no greater than 2048');
+if (!Number.isFinite(configuredMaxFileSizeMb) || configuredMaxFileSizeMb <= 0) {
+  throw new Error('MAX_FILE_SIZE_MB must be a positive number');
+}
+if (configuredMaxFileSizeMb > maxUploadFileSizeMb) {
+  console.warn('MAX_FILE_SIZE_MB exceeds 1024; enforcing a 1024 MB upload cap');
 }
 if (!Number.isFinite(attendanceThresholdPercent) || attendanceThresholdPercent <= 0 || attendanceThresholdPercent > 100) {
   throw new Error('ATTENDANCE_THRESHOLD_PERCENT must be greater than 0 and no greater than 100');

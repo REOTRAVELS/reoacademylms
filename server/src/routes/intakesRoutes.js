@@ -29,5 +29,6 @@ r.post('/:id/offerings/:offeringId/timetable', (req, res, next) => {
   }
   return uploadResourceFile(req, res, next);
 }, asyncHandler(timetable.uploadOfferingTimetable));
+r.delete('/:id/offerings/:offeringId/timetable', asyncHandler(timetable.deleteOfferingTimetable));
 r.delete('/:id/offerings/:offeringId', asyncHandler(c.removeIntakeOffering));
 export default r;

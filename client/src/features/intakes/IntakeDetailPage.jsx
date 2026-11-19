@@ -42,6 +42,7 @@ export default function IntakeDetailPage() {
   const [editingTimetableId, setEditingTimetableId] = useState(null);
   const [timetableSchedule, setTimetableSchedule] = useState('');
   const [uploadingOfferingId, setUploadingOfferingId] = useState(null);
+  const [deletingTimetableId, setDeletingTimetableId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -206,6 +207,19 @@ export default function IntakeDetailPage() {
       setError(requestError.response?.data?.message || 'Could not upload the program timetable document.');
     } finally {
       setUploadingOfferingId(null);
+    }
+  };
+
+  const deleteOfferingTimetable = async (offering) => {
+    if (!window.confirm(`Delete the timetable document "${offering.timetableFileName}"?`)) return;
+    setDeletingTimetableId(offering.id);
+    try {
+      await runAction(
+        () => intakesAPI.deleteTimetable(id, offering.id),
+        'Timetable document deleted.',
+      );
+    } finally {
+      setDeletingTimetableId(null);
     }
   };
 
@@ -475,17 +489,28 @@ export default function IntakeDetailPage() {
                     <span className="field-hint" id={`timetable-upload-help-${offering.id}`}>
                       PDF, Word, PowerPoint, Excel or CSV; up to 1 GB.
                     </span>
-                    <Button type="submit" size="sm" disabled={uploadingOfferingId !== null}>
+                    <Button type="submit" size="sm" disabled={uploadingOfferingId !== null || deletingTimetableId !== null}>
                       <Upload size={15} /> {uploadingOfferingId === offering.id ? 'Uploading…' : 'Upload document'}
                     </Button>
                     {offering.timetableFileName && (
-                      <a
-                        href={intakesAPI.timetableDownloadUrl(id, offering.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Download size={15} /> {offering.timetableFileName}
-                      </a>
+                      <>
+                        <a
+                          href={intakesAPI.timetableDownloadUrl(id, offering.id)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Download size={15} /> {offering.timetableFileName}
+                        </a>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteOfferingTimetable(offering)}
+                          disabled={uploadingOfferingId !== null || deletingTimetableId !== null}
+                        >
+                          <Trash2 size={15} /> {deletingTimetableId === offering.id ? 'Deleting…' : 'Delete document'}
+                        </Button>
+                      </>
                     )}
                   </form>
                 </details>
