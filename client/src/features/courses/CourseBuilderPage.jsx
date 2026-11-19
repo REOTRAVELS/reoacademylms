@@ -410,7 +410,7 @@ export default function CourseBuilderPage() {
       setNotice('Course resource uploaded.');
       await refreshQuality();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not upload this learning resource.');
+      setError(requestError.response?.data?.message || requestError.message || 'Could not upload this learning resource.');
     } finally {
       setSaving(false);
     }

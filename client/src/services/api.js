@@ -50,11 +50,16 @@ const uploadWithStorageIntent = async ({
   const intent = data.data;
   if (intent.mode === 'local') return api.post(finalizePath, localForm);
 
-  const uploadResponse = await fetch(intent.uploadUrl, {
-    method: 'PUT',
-    headers: intent.headers,
-    body: file,
-  });
+  let uploadResponse;
+  try {
+    uploadResponse = await fetch(intent.uploadUrl, {
+      method: 'PUT',
+      headers: intent.headers,
+      body: file,
+    });
+  } catch {
+    throw new Error('Direct upload to Backblaze failed. Check your connection and the bucket CORS rule for this LMS site.');
+  }
   if (!uploadResponse.ok) {
     throw new Error(`Object storage upload failed with status ${uploadResponse.status}`);
   }
@@ -67,8 +72,53 @@ const uploadWithStorageIntent = async ({
   });
 };
 
-// Keep proxied files below Vercel's request-body limit; larger files use signed storage uploads.
+// Keep individual LMS API upload requests below Vercel's request-body limit.
 const objectStorageProxyLimitBytes = 4 * 1024 * 1024;
+
+const uploadResourceInChunks = async ({ file, localForm, metadata }) => {
+  const { data } = await api.post('/resources/chunked-upload', {
+    originalName: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    ...metadata,
+  });
+  const intent = data.data;
+  if (intent.mode === 'local') return api.post('/resources/', localForm);
+
+  const uploadToken = intent.uploadToken;
+  if (typeof uploadToken !== 'string') throw new Error('Could not start the course resource upload');
+  const headers = {
+    'Content-Type': 'application/octet-stream',
+    'X-Resource-Upload-Token': uploadToken,
+  };
+  try {
+    if (!Number.isSafeInteger(intent.chunkSizeBytes) || intent.chunkSizeBytes < 1) {
+      throw new Error('The course resource upload could not be initialized');
+    }
+    for (let start = 0, index = 0; start < file.size; start += intent.chunkSizeBytes, index += 1) {
+      const chunk = file.slice(start, Math.min(start + intent.chunkSizeBytes, file.size));
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await api.put(`/resources/chunked-upload/chunks/${index}`, chunk, { headers });
+          break;
+        } catch (error) {
+          if (attempt >= 2 || (error.response && error.response.status < 500)) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        }
+      }
+    }
+    return api.post('/resources/chunked-upload/finalize', {}, { headers });
+  } catch (error) {
+    try {
+      await api.delete('/resources/chunked-upload', {
+        headers: { 'X-Resource-Upload-Token': uploadToken },
+      });
+    } catch (cleanupError) {
+      console.error('Could not cancel failed course resource upload', cleanupError);
+    }
+    throw error;
+  }
+};
 
 // Auth API methods
 export const authAPI = {
@@ -278,9 +328,7 @@ export const resourcesAPI = {
       throw new Error('Choose a file to upload');
     }
     if (file.size <= objectStorageProxyLimitBytes) return api.post('/resources/', formData);
-    return uploadWithStorageIntent({
-      intentPath: '/resources/upload-intent',
-      finalizePath: '/resources/',
+    return uploadResourceInChunks({
       file,
       localForm: formData,
       metadata: {

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, raw } from 'express';
 import { uploadObjectStorageProxyFile, uploadResourceFile } from '../middleware/upload.js';
 import * as c from '../controllers/resourcesController.js';
 import { authenticate } from '../middleware/auth.js';
@@ -16,6 +16,27 @@ r.post(
   '/upload-intent',
   requireRole('SUPER_ADMIN', 'TRAINER'),
   asyncHandler(c.createResourceUploadIntent),
+);
+r.post(
+  '/chunked-upload',
+  requireRole('SUPER_ADMIN', 'TRAINER'),
+  asyncHandler(c.createChunkedResourceUpload),
+);
+r.put(
+  '/chunked-upload/chunks/:chunkIndex',
+  requireRole('SUPER_ADMIN', 'TRAINER'),
+  raw({ type: 'application/octet-stream', limit: '4.25mb' }),
+  asyncHandler(c.uploadResourceChunk),
+);
+r.post(
+  '/chunked-upload/finalize',
+  requireRole('SUPER_ADMIN', 'TRAINER'),
+  asyncHandler(c.finalizeChunkedResourceUpload),
+);
+r.delete(
+  '/chunked-upload',
+  requireRole('SUPER_ADMIN', 'TRAINER'),
+  asyncHandler(c.abortChunkedResourceUpload),
 );
 r.post('/', requireRole('SUPER_ADMIN', 'TRAINER'), (req, res, next) => {
   if (req.is('application/json')) {

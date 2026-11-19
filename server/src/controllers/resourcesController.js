@@ -4,10 +4,18 @@ import { audit } from '../utils/audit.js';
 import { env } from '../config/env.js';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { canAccessCourse, canManageCourse, studentCourseAccessWhere } from '../utils/courseAccess.js';
 import { hasAllowedUploadType, resourceFileMatchesType, resourceTypes } from '../utils/uploadValidation.js';
 import { getObjectStorage, isObjectStorageEnabled } from '../services/objectStorage.js';
+import { signToken, verifyToken } from '../utils/jwt.js';
+
+const resourceUploadChunkSizeBytes = 4 * 1024 * 1024;
+const resourceUploadTokenTtl = '6h';
+const resourceUploadManifestKey = (sessionId) => `course-resource-upload-sessions/${sessionId}.json`;
+const resourceUploadChunkKey = (sessionId, chunkIndex) => (
+  `course-resource-upload-chunks/${sessionId}/${chunkIndex}`
+);
 
 const readFileHeader = (filePath) => {
   const descriptor = fs.openSync(filePath, 'r');
@@ -168,6 +176,370 @@ export const finalizeResourceUpload = async (req, res) => {
     ipAddress: req.ip,
   });
   return ok(res, resource, 'Uploaded', 201);
+};
+
+const getChunkedUploadClaims = (req, res) => {
+  const token = req.get('x-resource-upload-token');
+  if (!token) {
+    fail(res, 'Upload session is missing or expired. Please start the upload again.', 401);
+    return null;
+  }
+
+  let claims;
+  try {
+    claims = verifyToken(token);
+  } catch {
+    fail(res, 'Upload session is missing or expired. Please start the upload again.', 401);
+    return null;
+  }
+
+  if (
+    claims.purpose !== 'resource-upload'
+    || claims.ownerId !== req.user.id
+    || typeof claims.sessionId !== 'string'
+    || typeof claims.storageKey !== 'string'
+    || typeof claims.uploadId !== 'string'
+    || !Number.isSafeInteger(claims.sizeBytes)
+    || !Number.isSafeInteger(claims.totalChunks)
+  ) {
+    fail(res, 'Upload session is invalid', 403);
+    return null;
+  }
+  return claims;
+};
+
+const readResourceUploadManifest = async (storage, sessionId) => {
+  let manifestBuffer;
+  try {
+    manifestBuffer = await storage.getObjectBuffer(resourceUploadManifestKey(sessionId));
+  } catch (error) {
+    if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) return null;
+    throw error;
+  }
+
+  try {
+    const manifest = JSON.parse(manifestBuffer.toString('utf8'));
+    if (
+      !Number.isSafeInteger(manifest.nextChunkIndex)
+      || !Array.isArray(manifest.parts)
+      || !Array.isArray(manifest.chunkHashes)
+      || typeof manifest.uploadId !== 'string'
+    ) throw new Error('Invalid resource upload manifest');
+    return manifest;
+  } catch (error) {
+    console.error('Could not read course resource upload session', error);
+    throw new Error('Upload session state is invalid');
+  }
+};
+
+const writeResourceUploadManifest = (storage, sessionId, manifest) => storage.putObject({
+  key: resourceUploadManifestKey(sessionId),
+  body: Buffer.from(JSON.stringify(manifest)),
+  contentType: 'application/json',
+  metadata: { 'owner-id': manifest.ownerId },
+});
+
+const deleteTemporaryChunks = async (storage, sessionId, chunkIndexes) => {
+  for (const chunkIndex of chunkIndexes) {
+    try {
+      await storage.deleteObject(resourceUploadChunkKey(sessionId, chunkIndex));
+    } catch (error) {
+      console.error('Could not remove temporary course upload chunk', error);
+    }
+  }
+};
+
+const findExistingChunkedResource = (storageKey) => prisma.resource.findFirst({
+  where: { storagePath: storageKey },
+  select: {
+    id: true,
+    courseId: true,
+    lessonId: true,
+    originalName: true,
+    mimeType: true,
+    sizeBytes: true,
+    createdAt: true,
+  },
+});
+
+export const createChunkedResourceUpload = async (req, res) => {
+  const details = uploadDetails(req.body);
+  if (details.error) return fail(res, details.error, details.status);
+  const course = await resolveResourceCourse(req.body, req.user);
+  if (course.error) return fail(res, course.error, course.status);
+  if (!isObjectStorageEnabled()) return ok(res, { mode: 'local' });
+
+  const storage = getObjectStorage();
+  const sessionId = randomUUID();
+  const extension = path.extname(details.originalName).toLowerCase();
+  const storageKey = `course-resources/${req.user.id}/${randomUUID()}${extension}`;
+  const totalChunks = Math.ceil(details.sizeBytes / resourceUploadChunkSizeBytes);
+  const started = await storage.createMultipartUpload({
+    key: storageKey,
+    contentType: details.mimeType,
+    metadata: {
+      'owner-id': req.user.id,
+      'expected-size': String(details.sizeBytes),
+    },
+  });
+  if (!started.UploadId) throw new Error('Object storage did not return a multipart upload ID');
+
+  const manifest = {
+    ownerId: req.user.id,
+    storageKey,
+    uploadId: started.UploadId,
+    totalChunks,
+    nextChunkIndex: 0,
+    parts: [],
+    chunkHashes: [],
+  };
+  try {
+    await writeResourceUploadManifest(storage, sessionId, manifest);
+  } catch (error) {
+    try {
+      await storage.abortMultipartUpload({ key: storageKey, uploadId: started.UploadId });
+    } catch (cleanupError) {
+      console.error('Could not abort uninitialized course resource upload', cleanupError);
+    }
+    try {
+      await storage.deleteObject(resourceUploadManifestKey(sessionId));
+    } catch (cleanupError) {
+      console.error('Could not remove uninitialized course resource upload state', cleanupError);
+    }
+    throw error;
+  }
+
+  const uploadToken = signToken({
+    purpose: 'resource-upload',
+    ownerId: req.user.id,
+    sessionId,
+    storageKey,
+    uploadId: started.UploadId,
+    courseId: course.courseId,
+    lessonId: req.body.lessonId || null,
+    originalName: details.originalName,
+    mimeType: details.mimeType,
+    sizeBytes: details.sizeBytes,
+    totalChunks,
+  }, resourceUploadTokenTtl);
+  return ok(res, {
+    mode: 's3',
+    chunkSizeBytes: resourceUploadChunkSizeBytes,
+    uploadToken,
+  }, 'Upload ready', 201);
+};
+
+export const uploadResourceChunk = async (req, res) => {
+  const claims = getChunkedUploadClaims(req, res);
+  if (!claims) return;
+  const chunkIndex = Number(req.params.chunkIndex);
+  if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0 || chunkIndex >= claims.totalChunks) {
+    return fail(res, 'Upload chunk number is invalid', 400);
+  }
+  if (!Buffer.isBuffer(req.body)) return fail(res, 'Upload chunk is missing', 400);
+
+  const expectedSize = Math.min(
+    resourceUploadChunkSizeBytes,
+    claims.sizeBytes - chunkIndex * resourceUploadChunkSizeBytes,
+  );
+  if (req.body.length !== expectedSize) return fail(res, 'Upload chunk size is invalid', 400);
+
+  const storage = getObjectStorage();
+  const manifest = await readResourceUploadManifest(storage, claims.sessionId);
+  if (
+    !manifest
+    || manifest.ownerId !== req.user.id
+    || manifest.storageKey !== claims.storageKey
+    || manifest.uploadId !== claims.uploadId
+    || manifest.totalChunks !== claims.totalChunks
+  ) return fail(res, 'Upload session was not found or has expired', 410);
+  const chunkHash = createHash('sha256').update(req.body).digest('hex');
+  if (chunkIndex < manifest.nextChunkIndex) {
+    if (manifest.chunkHashes[chunkIndex] === chunkHash) {
+      return ok(res, { nextChunkIndex: chunkIndex + 1 });
+    }
+    return fail(res, 'This upload chunk was already received with different content', 409);
+  }
+  if (chunkIndex !== manifest.nextChunkIndex) {
+    return fail(res, 'Upload chunks must be sent in order. Please restart the upload.', 409);
+  }
+
+  await storage.putObject({
+    key: resourceUploadChunkKey(claims.sessionId, chunkIndex),
+    body: req.body,
+    contentType: 'application/octet-stream',
+    contentLength: req.body.length,
+  });
+
+  let parts = manifest.parts;
+  let pairedChunkIndexes = [];
+  if (chunkIndex % 2 === 1) {
+    const firstChunkIndex = chunkIndex - 1;
+    const partBody = Buffer.concat(await Promise.all([
+      storage.getObjectBuffer(resourceUploadChunkKey(claims.sessionId, firstChunkIndex)),
+      storage.getObjectBuffer(resourceUploadChunkKey(claims.sessionId, chunkIndex)),
+    ]));
+    const partNumber = parts.length + 1;
+    const uploadedPart = await storage.uploadPart({
+      key: claims.storageKey,
+      uploadId: claims.uploadId,
+      partNumber,
+      body: partBody,
+      contentLength: partBody.length,
+    });
+    if (!uploadedPart.ETag) throw new Error('Object storage did not return a multipart part tag');
+    parts = [...parts, { PartNumber: partNumber, ETag: uploadedPart.ETag }];
+    pairedChunkIndexes = [firstChunkIndex, chunkIndex];
+  }
+
+  await writeResourceUploadManifest(storage, claims.sessionId, {
+    ...manifest,
+    nextChunkIndex: chunkIndex + 1,
+    parts,
+    chunkHashes: [...manifest.chunkHashes, chunkHash],
+  });
+  await deleteTemporaryChunks(storage, claims.sessionId, pairedChunkIndexes);
+  return ok(res, { nextChunkIndex: chunkIndex + 1 });
+};
+
+export const finalizeChunkedResourceUpload = async (req, res) => {
+  const claims = getChunkedUploadClaims(req, res);
+  if (!claims) return;
+  const existingResource = await findExistingChunkedResource(claims.storageKey);
+  if (existingResource) return ok(res, existingResource, 'Uploaded', 201);
+
+  const course = await resolveResourceCourse({
+    courseId: claims.courseId,
+    lessonId: claims.lessonId,
+  }, req.user);
+  if (course.error) return fail(res, course.error, course.status);
+
+  const storage = getObjectStorage();
+  const manifest = await readResourceUploadManifest(storage, claims.sessionId);
+  if (
+    !manifest
+    || manifest.ownerId !== req.user.id
+    || manifest.storageKey !== claims.storageKey
+    || manifest.uploadId !== claims.uploadId
+    || manifest.totalChunks !== claims.totalChunks
+  ) return fail(res, 'Upload session was not found or has expired', 410);
+  if (manifest.nextChunkIndex !== claims.totalChunks) {
+    return fail(res, 'Upload is incomplete. Please finish sending all chunks.', 409);
+  }
+
+  let parts = manifest.parts;
+  if (claims.totalChunks % 2 === 1) {
+    const finalChunkIndex = claims.totalChunks - 1;
+    const finalPart = await storage.getObjectBuffer(resourceUploadChunkKey(claims.sessionId, finalChunkIndex));
+    const partNumber = parts.length + 1;
+    const uploadedPart = await storage.uploadPart({
+      key: claims.storageKey,
+      uploadId: claims.uploadId,
+      partNumber,
+      body: finalPart,
+      contentLength: finalPart.length,
+    });
+    if (!uploadedPart.ETag) throw new Error('Object storage did not return a multipart part tag');
+    parts = [...parts, { PartNumber: partNumber, ETag: uploadedPart.ETag }];
+    await deleteTemporaryChunks(storage, claims.sessionId, [finalChunkIndex]);
+  }
+
+  try {
+    await storage.completeMultipartUpload({
+      key: claims.storageKey,
+      uploadId: claims.uploadId,
+      parts,
+    });
+  } catch (error) {
+    let completedObject;
+    try {
+      completedObject = await storage.verifyUpload({
+        key: claims.storageKey,
+        contentType: claims.mimeType,
+        ownerId: req.user.id,
+        sizeBytes: claims.sizeBytes,
+      });
+    } catch {
+      throw error;
+    }
+    if (!completedObject) throw error;
+  }
+
+  const header = await storage.verifyUpload({
+    key: claims.storageKey,
+    contentType: claims.mimeType,
+    ownerId: req.user.id,
+    sizeBytes: claims.sizeBytes,
+  });
+  if (!header || !resourceFileMatchesType(header, claims.originalName, claims.mimeType)) {
+    await storage.deleteObject(claims.storageKey);
+    await storage.deleteObject(resourceUploadManifestKey(claims.sessionId));
+    return fail(res, 'Uploaded file content does not match its file type', 400);
+  }
+
+  let resource;
+  try {
+    resource = await createResourceRecord({
+      courseId: course.courseId,
+      lessonId: claims.lessonId,
+      originalName: claims.originalName,
+      mimeType: claims.mimeType,
+      sizeBytes: claims.sizeBytes,
+      key: claims.storageKey,
+      user: req.user,
+    });
+  } catch (error) {
+    try {
+      await storage.deleteObject(claims.storageKey);
+    } catch (cleanupError) {
+      console.error('Could not remove unreferenced course upload', cleanupError);
+    }
+    throw error;
+  }
+
+  try {
+    await storage.deleteObject(resourceUploadManifestKey(claims.sessionId));
+  } catch (error) {
+    console.error('Could not remove completed course upload state', error);
+  }
+  await audit({
+    actorId: req.user.id,
+    action: 'UPLOAD_RESOURCE',
+    entity: 'Resource',
+    entityId: resource.id,
+    ipAddress: req.ip,
+  });
+  return ok(res, resource, 'Uploaded', 201);
+};
+
+export const abortChunkedResourceUpload = async (req, res) => {
+  const claims = getChunkedUploadClaims(req, res);
+  if (!claims) return;
+  const existingResource = await findExistingChunkedResource(claims.storageKey);
+  if (existingResource) return ok(res, existingResource, 'Upload is already complete');
+
+  const storage = getObjectStorage();
+  const manifest = await readResourceUploadManifest(storage, claims.sessionId);
+  const nextChunkIndex = manifest?.nextChunkIndex || 0;
+  try {
+    await storage.abortMultipartUpload({ key: claims.storageKey, uploadId: claims.uploadId });
+  } catch (error) {
+    const isAlreadyCompleted = error.name === 'NoSuchUpload'
+      || error.Code === 'NoSuchUpload'
+      || error.$metadata?.httpStatusCode === 404;
+    if (!isAlreadyCompleted) throw error;
+  }
+
+  const firstPossibleTemporaryChunk = nextChunkIndex - (nextChunkIndex % 2);
+  const lastPossibleTemporaryChunk = Math.min(claims.totalChunks - 1, nextChunkIndex);
+  const chunkIndexes = [];
+  for (let index = firstPossibleTemporaryChunk; index <= lastPossibleTemporaryChunk; index += 1) {
+    if (index >= 0) chunkIndexes.push(index);
+  }
+  await deleteTemporaryChunks(storage, claims.sessionId, chunkIndexes);
+  await storage.deleteObject(resourceUploadManifestKey(claims.sessionId));
+  await storage.deleteObject(claims.storageKey);
+  return ok(res, null, 'Upload cancelled');
 };
 
 export const uploadResourceToObjectStorage = async (req, res) => {

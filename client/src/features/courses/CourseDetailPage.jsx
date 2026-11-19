@@ -142,7 +142,7 @@ export default function CourseDetailPage() {
       await refreshSelectedLesson(lessonId);
       setNotice('Learning material uploaded.');
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not upload this learning material.');
+      setError(requestError.response?.data?.message || requestError.message || 'Could not upload this learning material.');
     } finally {
       setResourceSaving(false);
     }

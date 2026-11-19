@@ -1,9 +1,13 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config/env.js';
@@ -89,6 +93,44 @@ export const createObjectStorageService = ({
     ContentLength: contentLength,
     ContentType: contentType,
     Metadata: metadata,
+  })),
+
+  getObjectBuffer: async (key) => {
+    const object = await uploadClient.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const chunks = [];
+    for await (const chunk of object.Body) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  },
+
+  createMultipartUpload: async ({ key, contentType, metadata }) => uploadClient.send(new CreateMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+    Metadata: metadata,
+  })),
+
+  uploadPart: async ({ key, uploadId, partNumber, body, contentLength = body.length }) => (
+    uploadClient.send(new UploadPartCommand({
+      Bucket: bucket,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+      Body: body,
+      ContentLength: contentLength,
+    }))
+  ),
+
+  completeMultipartUpload: async ({ key, uploadId, parts }) => uploadClient.send(new CompleteMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: parts },
+  })),
+
+  abortMultipartUpload: async ({ key, uploadId }) => uploadClient.send(new AbortMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    UploadId: uploadId,
   })),
 
   deleteObject: async (key) => uploadClient.send(new DeleteObjectCommand({

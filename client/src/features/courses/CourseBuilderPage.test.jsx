@@ -167,6 +167,22 @@ describe('CourseBuilderPage', () => {
     expect(screen.queryByText('new-guide.pdf')).toBeNull();
   });
 
+  it('shows direct storage upload errors to course editors', async () => {
+    const message = 'Direct upload to Backblaze failed. Check your connection and the bucket CORS rule for this LMS site.';
+    resourcesAPI.upload.mockRejectedValue(new Error(message));
+    const { container } = renderBuilder();
+    await screen.findByRole('heading', { name: 'Travel Operations' });
+    fireEvent.click(screen.getByRole('button', { name: /Course resources/ }));
+    await screen.findByRole('heading', { name: 'Course resources', level: 3 });
+
+    const file = new File(['video'], 'lesson.mp4', { type: 'video/mp4' });
+    const fileInput = container.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.submit(fileInput.closest('form'));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(message);
+  });
+
   it('validates learning outcomes before sending an update', async () => {
     renderBuilder();
     await screen.findByRole('heading', { name: 'Travel Operations' });
